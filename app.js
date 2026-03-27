@@ -52,6 +52,7 @@ const refs = {
   totalHomes: document.querySelector("#stat-total-homes"),
   totalTravel: document.querySelector("#stat-total-travel"),
   nextLeave: document.querySelector("#stat-next-leave"),
+  currentTime: document.querySelector("#stat-current-time"),
   windowLeft: document.querySelector("#stat-window-left"),
   completedHomes: document.querySelector("#stat-completed"),
   timelineTemplate: document.querySelector("#timeline-item-template")
@@ -68,6 +69,8 @@ renderApp();
 updateLocationStatus("Location not checked yet.");
 updateAppStatus(state.statusMessage);
 registerServiceWorker();
+window.setInterval(renderCurrentTime, 30000);
+renderCurrentTime();
 
 function bindEvents() {
   refs.openSidebarButton.addEventListener("click", openSidebar);
@@ -284,6 +287,7 @@ function renderSummary(properties) {
   refs.totalHomes.textContent = String(properties.length);
   refs.totalTravel.textContent = `${Math.round(totalTravel)} min`;
   refs.nextLeave.textContent = current ? current.leaveByLabel : next ? next.departureLabel : "-";
+  renderCurrentTime();
   refs.windowLeft.textContent = current ? current.timeRemainingLabel : next ? next.openWindowLabel : "-";
   refs.completedHomes.textContent = String(completed);
 
@@ -301,6 +305,10 @@ function renderSummary(properties) {
 
   refs.daySummaryTitle.textContent = properties.length ? "All planned viewings are complete." : "Build your open-home route.";
   refs.daySummaryCopy.textContent = properties.length ? "Review saved notes or add more properties to the day plan." : "Add properties manually or import a saved plan to get started.";
+}
+
+function renderCurrentTime() {
+  refs.currentTime.textContent = formatClockTime(dateToTimeString(new Date()));
 }
 
 function renderTimeline(properties, selectedPropertyId) {
