@@ -1,4 +1,5 @@
 const STORAGE_KEY = "house-hunter-day-plan-v2";
+const IMPORT_ENDPOINT = (window.HOUSE_HUNTER_CONFIG && window.HOUSE_HUNTER_CONFIG.importEndpoint) || "";
 
 const seededProperties = [
   {
@@ -97,6 +98,9 @@ const refs = {
   propertyDialog: document.querySelector("#property-dialog"),
   addPropertyButton: document.querySelector("#open-property-dialog"),
   closeDialogButton: document.querySelector("#close-property-dialog"),
+  importListingButton: document.querySelector("#import-listing"),
+  importUrlInput: document.querySelector("#import-url"),
+  importStatus: document.querySelector("#import-status"),
   seedDataButton: document.querySelector("#seed-data"),
   clearAllButton: document.querySelector("#clear-all"),
   refreshLocationButton: document.querySelector("#refresh-location"),
@@ -126,6 +130,7 @@ function bindEvents() {
   refs.propertyForm.addEventListener("submit", handleAddProperty);
   refs.addPropertyButton.addEventListener("click", () => refs.propertyDialog.showModal());
   refs.closeDialogButton.addEventListener("click", () => refs.propertyDialog.close());
+  refs.importListingButton.addEventListener("click", handleImportListing);
   refs.propertyDialog.addEventListener("click", (event) => {
     if (event.target === refs.propertyDialog) {
       refs.propertyDialog.close();
@@ -190,6 +195,39 @@ function handleAddProperty(event) {
   renderApp();
 }
 
+async function handleImportListing() {
+  const url = refs.importUrlInput.value.trim();
+
+  if (!url) {
+    updateImportStatus("Paste a realestate.co.nz listing URL first.", true);
+    return;
+  }
+
+  if (!IMPORT_ENDPOINT) {
+    updateImportStatus("No import endpoint is configured yet. Deploy the worker and set window.HOUSE_HUNTER_CONFIG.importEndpoint.", true);
+    return;
+  }
+
+  updateImportStatus("Importing listing details...");
+  refs.importListingButton.disabled = true;
+
+  try {
+    const response = await fetch(`${IMPORT_ENDPOINT}?url=${encodeURIComponent(url)}`);
+    const payload = await response.json();
+
+    if (!response.ok) {
+      throw new Error(payload.error || "Import failed.");
+    }
+
+    populateFormFromImport(payload.property, url);
+    updateImportStatus("Listing imported. Check the fields before adding it to the day.");
+  } catch (error) {
+    updateImportStatus(error.message || "Import failed.", true);
+  } finally {
+    refs.importListingButton.disabled = false;
+  }
+}
+
 function requestCurrentLocation() {
   if (!navigator.geolocation) {
     updateLocationStatus("Geolocation is not supported in this browser.");
@@ -223,6 +261,11 @@ function updateLocationStatus(message) {
 function updateAppStatus(message) {
   state.statusMessage = message;
   refs.appStatus.textContent = message;
+}
+
+function updateImportStatus(message, isError = false) {
+  refs.importStatus.textContent = message;
+  refs.importStatus.className = isError ? "danger-text" : "meta-text";
 }
 
 function renderApp() {
@@ -459,6 +502,33 @@ function saveNotes(event, propertyId) {
   persistProperties(state.properties);
   updateAppStatus("Saved property notes.");
   renderApp();
+}
+
+function populateFormFromImport(property, listingUrl) {
+  if (!property) {
+    return;
+  }
+
+  setFormValue("address", property.address || "");
+  setFormValue("suburb", property.suburb || "");
+  setFormValue("openStart", property.openStart || "");
+  setFormValue("openEnd", property.openEnd || "");
+  setFormValue("beds", property.beds ?? "");
+  setFormValue("baths", property.baths ?? "");
+  setFormValue("parking", property.parking ?? "");
+  setFormValue("priceEstimate", property.priceEstimate || "");
+  setFormValue("listingUrl", listingUrl);
+  setFormValue("notes", property.notes || "");
+  setFormValue("lat", property.lat ?? "");
+  setFormValue("lng", property.lng ?? "");
+  setFormValue("checklist", Array.isArray(property.checklist) ? property.checklist.join("\n") : "");
+}
+
+function setFormValue(name, value) {
+  const element = refs.propertyForm.elements.namedItem(name);
+  if (element) {
+    element.value = value;
+  }
 }
 
 function loadProperties() {

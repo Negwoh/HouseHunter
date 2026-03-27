@@ -123,6 +123,21 @@
         <button id="close-property-dialog" class="ghost-button" type="button">Close</button>
       </div>
 
+      <section class="import-panel">
+        <div class="panel-heading">
+          <div>
+            <p class="eyebrow">Listing Import</p>
+            <h3>Import from realestate.co.nz</h3>
+          </div>
+          <button id="import-listing" class="secondary-button" type="button">Import Listing</button>
+        </div>
+        <label class="wide-field">
+          Listing URL
+          <input id="import-url" name="importUrl" type="url" placeholder="https://www.realestate.co.nz/42252678">
+        </label>
+        <p id="import-status" class="meta-text">Paste a listing URL to prefill the property details.</p>
+      </section>
+
       <div class="dialog-grid">
         <label>
           Address
@@ -203,6 +218,7 @@
     </article>
   </template>
 
+  <script src="./config.js"></script>
   <script src="./app.js"></script>
 </body>
 </html>

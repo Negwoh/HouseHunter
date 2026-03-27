@@ -590,6 +590,15 @@ textarea:focus {
   box-shadow: var(--shadow-lg);
 }
 
+.import-panel {
+  display: grid;
+  gap: 14px;
+  padding: 18px;
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.58);
+  border: 1px solid var(--line);
+}
+
 .dialog-header,
 .dialog-actions {
   display: flex;
