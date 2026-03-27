@@ -142,6 +142,7 @@ async function parseListing(html, listingUrl, env) {
   const facts = mergePropertyFacts(extractPropertyFactsFromHtmlV3(html), extractPropertyFactsV2(text));
   let coordinates = extractCoordinatesV2(html, jsonLd);
   const priceEstimate = firstNonEmpty(
+    extractMarketInsightsPrice(text),
     extractPrice(text),
     extractMeta(html, "og:description"),
     ""
@@ -222,6 +223,25 @@ function extractOpenHomeWindow(text) {
 
 function extractPrice(text) {
   const match = text.match(/(\$\s?[\d,.]+(?:\s?-\s?\$\s?[\d,.]+)?(?:\s?[mMkK])?)/);
+  return match ? match[1].replace(/\s+/g, " ").trim() : "";
+}
+
+function extractMarketInsightsPrice(text) {
+  const low = extractLabeledAmount(text, "Low");
+  const med = extractLabeledAmount(text, "Med");
+  const high = extractLabeledAmount(text, "High");
+  const parts = [
+    low ? `Low ${low}` : "",
+    med ? `Med ${med}` : "",
+    high ? `High ${high}` : ""
+  ].filter(Boolean);
+
+  return parts.length >= 2 ? parts.join(" | ") : "";
+}
+
+function extractLabeledAmount(text, label) {
+  const pattern = new RegExp(`\\b${label}\\b[^$]{0,40}(\\$\\s?[\\d,.]+(?:\\s?[mMkK])?)`, "i");
+  const match = text.match(pattern);
   return match ? match[1].replace(/\s+/g, " ").trim() : "";
 }
 
