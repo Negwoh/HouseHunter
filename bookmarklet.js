@@ -179,30 +179,72 @@
     return btoa(binary).replaceAll("+", "-").replaceAll("/", "_").replaceAll(/=+$/g, "");
   }
 
+  function isListingPath(pathname) {
+    return /\/\d{6,}(?:\/|$)/.test(pathname || "");
+  }
+
+  function toCleanListingUrl(rawValue) {
+    if (!rawValue) {
+      return "";
+    }
+
+    try {
+      const url = new URL(rawValue, window.location.href);
+      if (!/realestate\.co\.nz$/i.test(url.hostname) || !isListingPath(url.pathname)) {
+        return "";
+      }
+      return `${url.origin}${url.pathname}`.replace(/\/$/, "");
+    } catch {
+      return "";
+    }
+  }
+
+  function pushListing(seen, results, rawValue, title) {
+    const listingUrl = toCleanListingUrl(rawValue);
+    if (!listingUrl || seen.has(listingUrl)) {
+      return;
+    }
+
+    seen.add(listingUrl);
+    results.push({
+      listingUrl,
+      title: String(title || "").replace(/\s+/g, " ").trim()
+    });
+  }
+
   function getListingLinks() {
     const seen = new Set();
-    return Array.from(document.querySelectorAll("a[href]"))
-      .map((anchor) => {
-        try {
-          const url = new URL(anchor.href, window.location.href);
-          if (!/realestate\.co\.nz$/i.test(url.hostname) || !/\/\d{6,}/.test(url.pathname)) {
-            return null;
-          }
-          const cleanUrl = `${url.origin}${url.pathname}`;
-          if (seen.has(cleanUrl)) {
-            return null;
-          }
-          seen.add(cleanUrl);
-          const title = (anchor.textContent || anchor.getAttribute("aria-label") || "").replace(/\s+/g, " ").trim();
-          return {
-            listingUrl: cleanUrl,
-            title
-          };
-        } catch {
-          return null;
-        }
-      })
-      .filter(Boolean);
+    const results = [];
+
+    Array.from(document.querySelectorAll("a[href]")).forEach((anchor) => {
+      const nearbyTitle = [
+        anchor.getAttribute("aria-label"),
+        anchor.getAttribute("title"),
+        anchor.textContent,
+        anchor.closest("article, li, div")?.querySelector("h1, h2, h3, h4")?.textContent
+      ].find(Boolean);
+      pushListing(seen, results, anchor.href, nearbyTitle);
+    });
+
+    Array.from(document.querySelectorAll("[data-url], [data-href], [data-link], [data-listing-url]")).forEach((node) => {
+      const candidate = node.getAttribute("data-listing-url")
+        || node.getAttribute("data-url")
+        || node.getAttribute("data-href")
+        || node.getAttribute("data-link");
+      pushListing(seen, results, candidate, node.textContent || node.getAttribute("aria-label"));
+    });
+
+    const html = document.documentElement ? document.documentElement.innerHTML : "";
+    const htmlMatches = html.match(/https?:\/\/(?:www\.)?realestate\.co\.nz\/[^"'\\\s<]*?\/\d{6,}[^"'\\\s<]*/gi) || [];
+    htmlMatches.forEach((match) => pushListing(seen, results, match, ""));
+
+    const pathMatches = html.match(/(?:href|url|pathname|link)\s*[:=]\s*["'](\/[^"'\\\s<]*?\/\d{6,}[^"'\\\s<]*)["']/gi) || [];
+    pathMatches.forEach((match) => {
+      const path = (match.match(/["'](\/[^"']+)["']/) || [])[1];
+      pushListing(seen, results, path, "");
+    });
+
+    return results;
   }
 
   function openHouseHunter(params) {
@@ -220,17 +262,30 @@
   const currentUrl = new URL(window.location.href);
   const likelySingleListing = Boolean(
     (jsonLd && jsonLd.address) ||
-    /\/\d{6,}/.test(currentUrl.pathname) ||
+    isListingPath(currentUrl.pathname) ||
     /Open homes?/i.test(text) ||
     /(\d+)\s+bed/i.test(text)
   );
 
   if (!likelySingleListing) {
-    const listings = getListingLinks();
-    if (listings.length) {
+    const launchListImport = () => {
+      const listings = getListingLinks();
+      if (!listings.length) {
+        return false;
+      }
+
       openHouseHunter({
         prefill_list: encodeBase64Url(JSON.stringify({ listings }))
       });
+      return true;
+    };
+
+    if (launchListImport()) {
+      return;
+    }
+
+    if (/\/account\/saved-(?:properties|off-market-properties)/i.test(currentUrl.pathname)) {
+      updateStatusAndRetry();
       return;
     }
   }
@@ -263,4 +318,29 @@
   openHouseHunter({
     prefill: encodeBase64Url(JSON.stringify(property))
   });
+
+  function updateStatusAndRetry() {
+    const existingNotice = document.getElementById("house-hunter-bookmarklet-status");
+    if (!existingNotice) {
+      const notice = document.createElement("div");
+      notice.id = "house-hunter-bookmarklet-status";
+      notice.textContent = "House Hunter is waiting for saved properties to finish loading...";
+      notice.style.cssText = "position:fixed;right:16px;bottom:16px;z-index:2147483647;background:#111;color:#fff;padding:10px 14px;border-radius:999px;font:500 13px/1.4 system-ui,sans-serif;box-shadow:0 10px 30px rgba(0,0,0,.25);";
+      document.body.appendChild(notice);
+    }
+
+    window.setTimeout(() => {
+      const listings = getListingLinks();
+      document.getElementById("house-hunter-bookmarklet-status")?.remove();
+
+      if (listings.length) {
+        openHouseHunter({
+          prefill_list: encodeBase64Url(JSON.stringify({ listings }))
+        });
+        return;
+      }
+
+      window.alert("House Hunter could not find any listing links on this saved-properties page yet. Scroll the list into view and try the bookmarklet again.");
+    }, 1800);
+  }
 })();

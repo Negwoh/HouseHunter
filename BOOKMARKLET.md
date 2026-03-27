@@ -12,6 +12,8 @@ When run on public `realestate.co.nz` pages, the bookmarklet now supports two mo
   it extracts a best-effort property draft and opens House Hunter with the add-property dialog prefilled
 - list/search/results page:
   it collects multiple listing URLs from the page and opens House Hunter with a batch import payload
+- saved properties page:
+  it now does a broader scan for listing URLs and, on account pages, retries after a short delay so late-loading saved-property cards can still be imported
 
 House Hunter then imports that list through the existing listing import endpoint.
 
@@ -35,5 +37,5 @@ If your deploy URL changes, update that value.
 - This bookmarklet only uses public page content.
 - It does not rely on private auth tokens or session APIs.
 - Single listing pages open a draft for review, including best-effort extraction for beds, baths, parking, section size, and coordinates.
-- List/search pages try to import multiple listings into the route automatically.
+- List/search/saved-properties pages try to import multiple listings into the route automatically.
 - Batch import depends on the House Hunter listing import endpoint being configured and reachable.
