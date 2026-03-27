@@ -4,87 +4,6 @@ const HOUSE_HUNTER_CONFIG = window.HOUSE_HUNTER_CONFIG || {};
 const IMPORT_ENDPOINT = HOUSE_HUNTER_CONFIG.importEndpoint || "";
 const ETA_ENDPOINT = HOUSE_HUNTER_CONFIG.etaEndpoint || (IMPORT_ENDPOINT ? IMPORT_ENDPOINT.replace(/\/import$/, "/eta") : "");
 
-const seededProperties = [
-  {
-    id: crypto.randomUUID(),
-    address: "14 Tui Street",
-    suburb: "Grey Lynn",
-    openStart: "10:30",
-    openEnd: "11:00",
-    beds: 3,
-    baths: 2,
-    parking: 1,
-    lat: -36.85852,
-    lng: 174.73591,
-    priceEstimate: "$1.58M - $1.67M",
-    listingUrl: "https://www.realestate.co.nz/",
-    notes: "Sunny backyard, strong street appeal, confirm building report and school zone.",
-    checklist: [
-      "Ask for LIM and builder's report",
-      "Check natural light in bedrooms",
-      "Confirm school zone boundary"
-    ],
-    sources: [
-      { name: "realestate.co.nz", label: "Listing" },
-      { name: "House Hunter", label: "Manual estimate" }
-    ],
-    status: "upcoming",
-    checkInTime: null
-  },
-  {
-    id: crypto.randomUUID(),
-    address: "7 Rata Road",
-    suburb: "Ponsonby",
-    openStart: "11:30",
-    openEnd: "12:00",
-    beds: 2,
-    baths: 1,
-    parking: 0,
-    lat: -36.84795,
-    lng: 174.74272,
-    priceEstimate: "$1.18M - $1.25M",
-    listingUrl: "https://www.realestate.co.nz/",
-    notes: "Great location, but road noise is a concern. Ask about body corp and storage.",
-    checklist: [
-      "Test street noise with windows open",
-      "Check body corp docs",
-      "Inspect kitchen storage"
-    ],
-    sources: [
-      { name: "realestate.co.nz", label: "Listing" },
-      { name: "Council data", label: "Land parcel" }
-    ],
-    status: "upcoming",
-    checkInTime: null
-  },
-  {
-    id: crypto.randomUUID(),
-    address: "21 Kowhai Avenue",
-    suburb: "Mt Eden",
-    openStart: "13:15",
-    openEnd: "14:00",
-    beds: 4,
-    baths: 2,
-    parking: 2,
-    lat: -36.88457,
-    lng: 174.75797,
-    priceEstimate: "$1.89M - $2.02M",
-    listingUrl: "https://www.realestate.co.nz/",
-    notes: "Renovated family home. Check slope, drainage, attic storage, and backyard usability.",
-    checklist: [
-      "Inspect drainage around retaining walls",
-      "Check attic storage access",
-      "Review recent renovation quality"
-    ],
-    sources: [
-      { name: "realestate.co.nz", label: "Listing" },
-      { name: "House Hunter", label: "Travel plan" }
-    ],
-    status: "upcoming",
-    checkInTime: null
-  }
-];
-
 const DRIVING_SPEED_KMH = 38;
 
 const state = {
@@ -113,7 +32,9 @@ const refs = {
   homeLngInput: document.querySelector("#home-lng"),
   homeStatus: document.querySelector("#home-status"),
   clearHomeButton: document.querySelector("#clear-home"),
-  seedDataButton: document.querySelector("#seed-data"),
+  exportPlanButton: document.querySelector("#export-plan"),
+  importPlanButton: document.querySelector("#import-plan"),
+  importPlanFileInput: document.querySelector("#import-plan-file"),
   clearAllButton: document.querySelector("#clear-all"),
   refreshLocationButton: document.querySelector("#refresh-location"),
   locationStatus: document.querySelector("#location-status"),
@@ -144,6 +65,9 @@ function bindEvents() {
   refs.propertyForm.addEventListener("submit", handleAddProperty);
   refs.homeForm.addEventListener("submit", handleSaveHomeLocation);
   refs.clearHomeButton.addEventListener("click", clearHomeLocation);
+  refs.exportPlanButton.addEventListener("click", exportPlan);
+  refs.importPlanButton.addEventListener("click", () => refs.importPlanFileInput.click());
+  refs.importPlanFileInput.addEventListener("change", importPlanFromFile);
   refs.addPropertyButton.addEventListener("click", () => refs.propertyDialog.showModal());
   refs.closeDialogButton.addEventListener("click", () => refs.propertyDialog.close());
   refs.importListingButton.addEventListener("click", handleImportListing);
@@ -151,14 +75,6 @@ function bindEvents() {
     if (event.target === refs.propertyDialog) {
       refs.propertyDialog.close();
     }
-  });
-
-  refs.seedDataButton.addEventListener("click", () => {
-    state.properties = seededProperties.map((property) => ({ ...property, id: crypto.randomUUID() }));
-    state.selectedPropertyId = state.properties[0]?.id ?? null;
-    persistProperties(state.properties);
-    updateAppStatus("Loaded the example day plan.");
-    renderApp();
   });
 
   refs.clearAllButton.addEventListener("click", () => {
@@ -326,7 +242,7 @@ function renderSummary(properties) {
   }
 
   refs.daySummaryTitle.textContent = properties.length ? "All planned viewings are complete." : "Build your open-home route.";
-  refs.daySummaryCopy.textContent = properties.length ? "Review saved notes or add more properties to the day plan." : "Add properties manually or load the example day to get started.";
+  refs.daySummaryCopy.textContent = properties.length ? "Review saved notes or add more properties to the day plan." : "Add properties manually or import a saved plan to get started.";
 }
 
 function renderTimeline(properties, selectedPropertyId) {
@@ -898,6 +814,85 @@ function clearHomeLocation() {
   updateHomeStatus("Cleared saved home location.");
   updateAppStatus("Cleared home location.");
   renderApp();
+}
+
+function exportPlan() {
+  const payload = {
+    exportedAt: new Date().toISOString(),
+    version: 1,
+    homeLocation: state.homeLocation,
+    properties: state.properties
+  };
+
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  const date = new Date().toISOString().slice(0, 10);
+  anchor.href = url;
+  anchor.download = `house-hunter-plan-${date}.json`;
+  anchor.click();
+  URL.revokeObjectURL(url);
+  updateAppStatus("Exported the current plan.");
+}
+
+async function importPlanFromFile(event) {
+  const file = event.target.files && event.target.files[0];
+  if (!file) {
+    return;
+  }
+
+  try {
+    const text = await file.text();
+    const payload = JSON.parse(text);
+    const properties = Array.isArray(payload.properties) ? payload.properties.map(normalizeImportedProperty).filter(Boolean) : [];
+
+    state.properties = getSortedProperties(properties);
+    state.selectedPropertyId = state.properties[0]?.id ?? null;
+    persistProperties(state.properties);
+
+    if (payload.homeLocation && Number.isFinite(Number(payload.homeLocation.lat)) && Number.isFinite(Number(payload.homeLocation.lng))) {
+      state.homeLocation = {
+        address: String(payload.homeLocation.address || "").trim(),
+        lat: Number(payload.homeLocation.lat),
+        lng: Number(payload.homeLocation.lng)
+      };
+      persistHomeLocation(state.homeLocation);
+      hydrateHomeForm();
+    }
+
+    updateAppStatus(`Imported ${state.properties.length} properties from file.`);
+    renderApp();
+  } catch {
+    updateAppStatus("Could not import that plan file.");
+  } finally {
+    refs.importPlanFileInput.value = "";
+  }
+}
+
+function normalizeImportedProperty(property) {
+  if (!property || !property.address) {
+    return null;
+  }
+
+  return {
+    id: property.id || crypto.randomUUID(),
+    address: String(property.address || "").trim(),
+    suburb: String(property.suburb || "").trim(),
+    openStart: String(property.openStart || ""),
+    openEnd: String(property.openEnd || ""),
+    beds: Number(property.beds) || 0,
+    baths: Number(property.baths) || 0,
+    parking: Number(property.parking) || 0,
+    lat: property.lat === "" || property.lat == null ? "" : Number(property.lat),
+    lng: property.lng === "" || property.lng == null ? "" : Number(property.lng),
+    priceEstimate: String(property.priceEstimate || "").trim(),
+    listingUrl: String(property.listingUrl || "").trim(),
+    notes: String(property.notes || "").trim(),
+    checklist: Array.isArray(property.checklist) ? property.checklist : [],
+    sources: Array.isArray(property.sources) ? property.sources : buildSources(String(property.listingUrl || "").trim()),
+    status: ["upcoming", "current", "done"].includes(property.status) ? property.status : "upcoming",
+    checkInTime: property.checkInTime || null
+  };
 }
 
 async function importBookmarkletList(listings) {

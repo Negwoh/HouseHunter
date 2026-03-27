@@ -28,9 +28,11 @@
         </div>
         <div class="stack-actions">
           <button id="open-property-dialog" class="primary-button" type="button">Add Property</button>
-          <button id="seed-data" class="ghost-button" type="button">Load Example Day</button>
+          <button id="export-plan" class="ghost-button" type="button">Export Plan</button>
+          <button id="import-plan" class="ghost-button" type="button">Import Plan</button>
           <button id="clear-all" class="secondary-button" type="button">Clear Plan</button>
         </div>
+        <input id="import-plan-file" type="file" accept="application/json,.json" hidden>
         <p class="meta-text">Travel is always calculated as driving between stops.</p>
       </section>
 
@@ -91,7 +93,7 @@
         <div>
           <p class="eyebrow">Today's Route</p>
           <h2 id="day-summary-title">Build your open-home route.</h2>
-          <p id="day-summary-copy">Add properties manually or load the example day to get started.</p>
+          <p id="day-summary-copy">Add properties manually or import a saved plan to get started.</p>
         </div>
         <div class="summary-grid">
           <article>

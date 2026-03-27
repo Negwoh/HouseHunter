@@ -7,6 +7,7 @@ Current capabilities:
 - add properties through a modal app flow
 - import a `realestate.co.nz` listing URL through a serverless worker
 - use Google Maps traffic-aware drive time estimates when the worker is configured
+- export and import saved plans as JSON files for transfer between devices
 - track the day as a timed driving itinerary
 - click into each stop for timing, checklist, notes, and source links
 - refresh device location for live distance-to-next estimates
@@ -17,7 +18,7 @@ Current capabilities:
 ## Running it locally
 
 1. Open `index.html` in a browser for a quick local preview.
-2. Use `Add Property` or `Load Example Day`.
+2. Use `Add Property`, `Export Plan`, or `Import Plan`.
 3. Allow location access if you want live distance estimates.
 
 For best results, host it over HTTPS rather than opening it from `file://`.
@@ -64,6 +65,22 @@ Each property stores:
 - visit status: `upcoming`, `current`, or `done`
 
 The app persists the day plan in `localStorage`.
+
+## Moving a plan between devices
+
+Use:
+
+- `Export Plan` on your computer to save a JSON file
+- move that JSON file to your phone
+- use `Import Plan` on your phone to restore the route
+
+The export includes:
+
+- saved home location
+- properties
+- notes
+- checklist items
+- visit status
 
 ## Current limitations
 
