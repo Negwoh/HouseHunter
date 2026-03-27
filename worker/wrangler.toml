@@ -4,3 +4,6 @@ compatibility_date = "2026-03-27"
 
 [vars]
 ALLOWED_ORIGIN = "https://negwoh.github.io"
+
+[observability]
+enabled = true

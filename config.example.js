@@ -1,3 +1,4 @@
 window.HOUSE_HUNTER_CONFIG = {
-  importEndpoint: "https://your-worker-subdomain.workers.dev/import"
+  importEndpoint: "https://your-worker-subdomain.workers.dev/import",
+  etaEndpoint: "https://your-worker-subdomain.workers.dev/eta"
 };

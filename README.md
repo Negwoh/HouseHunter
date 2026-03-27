@@ -6,6 +6,7 @@ Current capabilities:
 
 - add properties through a modal app flow
 - import a `realestate.co.nz` listing URL through a serverless worker
+- use Google Maps traffic-aware drive time estimates when the worker is configured
 - track the day as a timed driving itinerary
 - click into each stop for timing, checklist, notes, and source links
 - refresh device location for live distance-to-next estimates
@@ -90,6 +91,8 @@ Edit `config.js` and set:
 
 `window.HOUSE_HUNTER_CONFIG.importEndpoint = "https://your-worker-url/import"`
 
+`window.HOUSE_HUNTER_CONFIG.etaEndpoint = "https://your-worker-url/eta"`
+
 ### 3. Push the frontend again
 
 Once `config.js` points at the worker, the `Import Listing` button in the add-property dialog will try to prefill:
@@ -104,6 +107,33 @@ Once `config.js` points at the worker, the `Import Listing` button in the add-pr
 - notes/description
 - checklist starter items
 - coordinates when they are present in the page markup
+
+## Google Maps travel-time setup
+
+The worker can also call Google Routes API for better driving ETAs.
+
+### 1. Create a Google Maps Platform key
+
+Enable the Routes API in your Google Cloud project, then create an API key.
+
+### 2. Add the key as a worker secret
+
+From the `worker/` directory:
+
+`wrangler secret put GOOGLE_MAPS_API_KEY`
+
+Paste the key when prompted.
+
+### 3. Redeploy the worker
+
+`wrangler deploy`
+
+After redeploying, the frontend can call:
+
+- `/import` for listing import
+- `/eta` for traffic-aware driving ETA
+
+The app will still fall back to the straight-line estimate if the worker or Google API is unavailable.
 
 ## Next production integrations
 

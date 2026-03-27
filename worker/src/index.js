@@ -6,6 +6,10 @@ export default {
       return new Response(null, { headers: buildCorsHeaders(request, env) });
     }
 
+    if (url.pathname === "/eta") {
+      return handleEta(request, env, url);
+    }
+
     if (url.pathname !== "/import") {
       return json({ error: "Not found." }, 404, request, env);
     }
@@ -38,6 +42,62 @@ export default {
     }
   }
 };
+
+async function handleEta(request, env, url) {
+  if (!env.GOOGLE_MAPS_API_KEY) {
+    return json({ error: "GOOGLE_MAPS_API_KEY is not configured." }, 500, request, env);
+  }
+
+  const origin = readLatLng(url, "oLat", "oLng");
+  const destination = readLatLng(url, "dLat", "dLng");
+
+  if (!origin || !destination) {
+    return json({ error: "Missing or invalid coordinates." }, 400, request, env);
+  }
+
+  try {
+    const response = await fetch("https://routes.googleapis.com/directions/v2:computeRoutes", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Goog-Api-Key": env.GOOGLE_MAPS_API_KEY,
+        "X-Goog-FieldMask": "routes.duration,routes.distanceMeters,routes.localizedValues.duration,routes.localizedValues.distance"
+      },
+      body: JSON.stringify({
+        origin: { location: { latLng: origin } },
+        destination: { location: { latLng: destination } },
+        travelMode: "DRIVE",
+        routingPreference: "TRAFFIC_AWARE",
+        departureTime: new Date().toISOString()
+      })
+    });
+
+    const payload = await response.json();
+    if (!response.ok) {
+      return json({ error: payload.error?.message || "Google Routes API request failed." }, 502, request, env);
+    }
+
+    const firstRoute = payload.routes && payload.routes[0];
+    if (!firstRoute) {
+      return json({ error: "No route returned." }, 502, request, env);
+    }
+
+    const durationSeconds = parseDurationSeconds(firstRoute.duration);
+    const durationMinutes = Math.max(1, Math.round(durationSeconds / 60));
+    const distanceMeters = Number(firstRoute.distanceMeters || 0);
+
+    return json({
+      route: {
+        durationMinutes,
+        durationLabel: firstRoute.localizedValues?.duration?.text || `${durationMinutes} min`,
+        distanceMeters,
+        distanceLabel: firstRoute.localizedValues?.distance?.text || `${(distanceMeters / 1000).toFixed(1)} km`
+      }
+    }, 200, request, env);
+  } catch (error) {
+    return json({ error: error.message || "ETA lookup failed." }, 500, request, env);
+  }
+}
 
 function parseListing(html, listingUrl) {
   const jsonLd = extractJsonLd(html);
@@ -231,6 +291,22 @@ function buildCorsHeaders(request, env) {
     "Access-Control-Allow-Methods": "GET, OPTIONS",
     "Access-Control-Allow-Headers": "Content-Type"
   };
+}
+
+function readLatLng(url, latKey, lngKey) {
+  const lat = Number(url.searchParams.get(latKey));
+  const lng = Number(url.searchParams.get(lngKey));
+
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+    return null;
+  }
+
+  return { latitude: lat, longitude: lng };
+}
+
+function parseDurationSeconds(value) {
+  const match = String(value || "").match(/(?<seconds>\d+)s$/);
+  return match ? Number(match.groups.seconds) : 0;
 }
 
 function json(payload, status, request, env) {

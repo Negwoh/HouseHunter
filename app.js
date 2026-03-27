@@ -1,5 +1,7 @@
 const STORAGE_KEY = "house-hunter-day-plan-v2";
-const IMPORT_ENDPOINT = (window.HOUSE_HUNTER_CONFIG && window.HOUSE_HUNTER_CONFIG.importEndpoint) || "";
+const HOUSE_HUNTER_CONFIG = window.HOUSE_HUNTER_CONFIG || {};
+const IMPORT_ENDPOINT = HOUSE_HUNTER_CONFIG.importEndpoint || "";
+const ETA_ENDPOINT = HOUSE_HUNTER_CONFIG.etaEndpoint || (IMPORT_ENDPOINT ? IMPORT_ENDPOINT.replace(/\/import$/, "/eta") : "");
 
 const seededProperties = [
   {
@@ -88,7 +90,9 @@ const state = {
   properties: loadProperties(),
   selectedPropertyId: null,
   currentLocation: null,
-  statusMessage: "Open the day planner and start building your route."
+  statusMessage: "Open the day planner and start building your route.",
+  routeCache: {},
+  pendingRouteRequests: new Set()
 };
 
 const refs = {
@@ -270,12 +274,13 @@ function updateImportStatus(message, isError = false) {
 
 function renderApp() {
   state.properties = getSortedProperties(state.properties);
-  const properties = buildAugmentedProperties(state.properties, state.currentLocation);
+  const properties = buildAugmentedProperties(state.properties, state.currentLocation, state.routeCache);
   const selected = properties.find((property) => property.id === state.selectedPropertyId) ?? properties[0] ?? null;
 
   renderSummary(properties);
   renderTimeline(properties, selected?.id ?? null);
   renderDetails(selected);
+  prefetchBetterEtas(properties);
 }
 
 function renderSummary(properties) {
@@ -347,7 +352,7 @@ function renderTimeline(properties, selectedPropertyId) {
       `${property.beds} bd`,
       `${property.baths} ba`,
       `${property.travelFromPreviousMinutes} min drive`,
-      property.distanceFromCurrentLabel
+      property.currentTravelLabel
     ].forEach((text) => {
       const pill = document.createElement("span");
       pill.className = "metric-pill";
@@ -403,6 +408,7 @@ function renderDetails(selected) {
         <article><span>Leave By</span><strong>${escapeHtml(selected.leaveByLabel)}</strong></article>
       </div>
       <p class="${selected.leaveWarningClass}">${escapeHtml(selected.leaveMessage)}</p>
+      <p class="meta-text">${escapeHtml(selected.liveEtaDetail)}</p>
     </section>
 
     <section class="detail-section">
@@ -564,7 +570,7 @@ function buildSources(listingUrl) {
   }
 }
 
-function buildAugmentedProperties(properties, currentLocation) {
+function buildAugmentedProperties(properties, currentLocation, routeCache) {
   const now = new Date();
   const sorted = getSortedProperties(properties);
   const currentIndex = sorted.findIndex((property) => property.status === "current");
@@ -573,15 +579,31 @@ function buildAugmentedProperties(properties, currentLocation) {
     const previousProperty = sorted[index - 1];
     const nextProperty = sorted[index + 1];
     const distanceFromPreviousKm = previousProperty ? haversineKm(previousProperty, property) : 0;
-    const travelFromPreviousMinutes = previousProperty ? estimateTravelMinutes(distanceFromPreviousKm) : 0;
+    const previousRoute = previousProperty ? getCachedRoute(previousProperty, property, routeCache) : null;
+    const travelFromPreviousMinutes = previousProperty
+      ? previousRoute?.durationMinutes ?? estimateTravelMinutes(distanceFromPreviousKm)
+      : 0;
 
     const currentOrigin = currentIndex === -1 || index <= currentIndex ? currentLocation : sorted[currentIndex];
     const distanceFromCurrentKm = currentOrigin ? haversineKm(currentOrigin, property) : null;
-    const distanceFromCurrentLabel = distanceFromCurrentKm == null ? "Location needed" : `${distanceFromCurrentKm.toFixed(1)} km away`;
+    const currentRoute = currentOrigin ? getCachedRoute(currentOrigin, property, routeCache) : null;
+    const distanceFromCurrentLabel = currentRoute
+      ? currentRoute.distanceLabel
+      : distanceFromCurrentKm == null
+        ? "Location needed"
+        : `${distanceFromCurrentKm.toFixed(1)} km away`;
+    const currentTravelLabel = currentRoute
+      ? `${currentRoute.durationMinutes} min from you`
+      : distanceFromCurrentKm == null
+        ? "Location needed"
+        : `${distanceFromCurrentKm.toFixed(1)} km away`;
 
     const openStartDate = combineWithToday(property.openStart);
     const openEndDate = combineWithToday(property.openEnd);
-    const nextTravelMinutes = nextProperty ? estimateTravelMinutes(haversineKm(property, nextProperty)) : 0;
+    const nextRoute = nextProperty ? getCachedRoute(property, nextProperty, routeCache) : null;
+    const nextTravelMinutes = nextProperty
+      ? nextRoute?.durationMinutes ?? estimateTravelMinutes(haversineKm(property, nextProperty))
+      : 0;
     const leaveByDate = nextProperty
       ? new Date(combineWithToday(nextProperty.openStart).getTime() - nextTravelMinutes * 60000)
       : openEndDate;
@@ -605,9 +627,81 @@ function buildAugmentedProperties(properties, currentLocation) {
       leaveByLabel,
       timeRemainingLabel: `${timeRemainingMinutes} min left`,
       leaveMessage: buildLeaveMessage(property.status, leaveDeltaMinutes, timeRemainingMinutes, nextProperty),
-      leaveWarningClass: leaveDeltaMinutes < 0 ? "danger-text" : leaveDeltaMinutes <= 10 ? "warning-text" : "meta-text"
+      leaveWarningClass: leaveDeltaMinutes < 0 ? "danger-text" : leaveDeltaMinutes <= 10 ? "warning-text" : "meta-text",
+      currentTravelLabel,
+      liveEtaDetail: currentRoute
+        ? `Live Google route estimate: ${currentRoute.durationLabel}, ${currentRoute.distanceLabel}.`
+        : currentLocation
+          ? "Live drive ETA will improve once the Google route service responds."
+          : "Refresh live position to see drive ETA from your current location."
     };
   });
+}
+
+function prefetchBetterEtas(properties) {
+  if (!ETA_ENDPOINT) {
+    return;
+  }
+
+  const currentIndex = properties.findIndex((property) => property.status === "current");
+
+  properties.forEach((property, index) => {
+    const previousProperty = properties[index - 1];
+    if (previousProperty) {
+      fetchBetterEta(previousProperty, property);
+    }
+
+    const currentOrigin = currentIndex === -1 || index <= currentIndex ? state.currentLocation : properties[currentIndex];
+    if (currentOrigin) {
+      fetchBetterEta(currentOrigin, property);
+    }
+  });
+}
+
+async function fetchBetterEta(origin, destination) {
+  if (!origin || !destination) {
+    return;
+  }
+
+  const key = buildRouteKey(origin, destination);
+  if (state.routeCache[key] || state.pendingRouteRequests.has(key)) {
+    return;
+  }
+
+  state.pendingRouteRequests.add(key);
+
+  try {
+    const query = new URLSearchParams({
+      oLat: String(origin.lat),
+      oLng: String(origin.lng),
+      dLat: String(destination.lat),
+      dLng: String(destination.lng)
+    });
+
+    const response = await fetch(`${ETA_ENDPOINT}?${query.toString()}`);
+    const payload = await response.json();
+
+    if (response.ok && payload.route) {
+      state.routeCache[key] = payload.route;
+      renderApp();
+    }
+  } catch {
+    // Keep straight-line fallback when the live ETA service fails.
+  } finally {
+    state.pendingRouteRequests.delete(key);
+  }
+}
+
+function buildRouteKey(origin, destination) {
+  return `${roundCoord(origin.lat)},${roundCoord(origin.lng)}:${roundCoord(destination.lat)},${roundCoord(destination.lng)}`;
+}
+
+function getCachedRoute(origin, destination, routeCache) {
+  return routeCache[buildRouteKey(origin, destination)] || null;
+}
+
+function roundCoord(value) {
+  return Number(value).toFixed(5);
 }
 
 function buildLeaveMessage(status, leaveDeltaMinutes, timeRemainingMinutes, nextProperty) {
