@@ -19,6 +19,10 @@ const state = {
 };
 
 const refs = {
+  sidebar: document.querySelector("#sidebar"),
+  openSidebarButton: document.querySelector("#open-sidebar"),
+  closeSidebarButton: document.querySelector("#close-sidebar"),
+  drawerBackdrop: document.querySelector("#drawer-backdrop"),
   timeline: document.querySelector("#timeline"),
   propertyDetails: document.querySelector("#property-details"),
   propertyForm: document.querySelector("#property-form"),
@@ -66,6 +70,9 @@ updateAppStatus(state.statusMessage);
 registerServiceWorker();
 
 function bindEvents() {
+  refs.openSidebarButton.addEventListener("click", openSidebar);
+  refs.closeSidebarButton.addEventListener("click", closeSidebar);
+  refs.drawerBackdrop.addEventListener("click", closeSidebar);
   refs.propertyForm.addEventListener("submit", handleAddProperty);
   refs.homeForm.addEventListener("submit", handleSaveHomeLocation);
   refs.homeSearchButton.addEventListener("click", handleSearchHomeAddress);
@@ -92,6 +99,22 @@ function bindEvents() {
   });
 
   refs.refreshLocationButton.addEventListener("click", requestCurrentLocation);
+}
+
+function openSidebar() {
+  refs.sidebar.classList.remove("drawer-closed");
+  refs.sidebar.classList.add("drawer-open");
+  refs.sidebar.setAttribute("aria-hidden", "false");
+  refs.drawerBackdrop.hidden = false;
+  document.body.classList.add("drawer-active");
+}
+
+function closeSidebar() {
+  refs.sidebar.classList.remove("drawer-open");
+  refs.sidebar.classList.add("drawer-closed");
+  refs.sidebar.setAttribute("aria-hidden", "true");
+  refs.drawerBackdrop.hidden = true;
+  document.body.classList.remove("drawer-active");
 }
 
 async function handleAddProperty(event) {
@@ -923,7 +946,10 @@ function escapeHtml(value) {
 function registerServiceWorker() {
   const isSupportedProtocol = window.location.protocol === "http:" || window.location.protocol === "https:";
   if ("serviceWorker" in navigator && isSupportedProtocol) {
-    navigator.serviceWorker.register("./sw.js").catch(() => {});
+    navigator.serviceWorker
+      .register("./sw.js", { updateViaCache: "none" })
+      .then((registration) => registration.update())
+      .catch(() => {});
   }
 }
 

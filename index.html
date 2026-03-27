@@ -14,17 +14,18 @@
   <link rel="stylesheet" href="./styles.css">
 </head>
 <body>
+  <div id="drawer-backdrop" class="drawer-backdrop" hidden></div>
   <div class="app-shell">
-    <aside class="sidebar">
+    <aside id="sidebar" class="sidebar drawer-closed" aria-hidden="true">
       <div class="brand">
-        <p class="eyebrow">Open Home Day Planner</p>
         <h1>House Hunter</h1>
-        <p class="lede">A proper day-of app for sequencing open homes, tracking drive windows, and saving impressions at each stop.</p>
+        <p class="lede">Plan the route, track the timing, save the notes.</p>
       </div>
 
       <section class="panel route-panel">
         <div class="panel-heading">
-          <h2>Route Actions</h2>
+          <h2>Menu</h2>
+          <button id="close-sidebar" class="ghost-button" type="button">Close</button>
         </div>
         <div class="stack-actions">
           <button id="open-property-dialog" class="primary-button" type="button">Add Property</button>
@@ -92,7 +93,10 @@
     <main class="main-content">
       <header class="topbar panel">
         <div>
-          <p class="eyebrow">Planner Status</p>
+          <div class="topbar-title-row">
+            <button id="open-sidebar" class="ghost-button menu-button" type="button" aria-label="Open menu">Menu</button>
+            <p class="eyebrow">House Hunter</p>
+          </div>
           <h2>Plan the day, run the route, capture the details.</h2>
         </div>
         <p id="app-status" class="status-banner">Open the day planner and start building your route.</p>
@@ -100,7 +104,6 @@
 
       <section class="hero panel">
         <div>
-          <p class="eyebrow">Today's Route</p>
           <h2 id="day-summary-title">Build your open-home route.</h2>
           <p id="day-summary-copy">Add properties manually or import a saved plan to get started.</p>
         </div>
@@ -131,10 +134,7 @@
       <section class="content-grid">
         <section class="panel itinerary-panel">
           <div class="panel-heading">
-            <div>
-              <p class="eyebrow">Route</p>
-              <h2>Itinerary</h2>
-            </div>
+            <h2>Itinerary</h2>
           </div>
           <div id="timeline" class="timeline"></div>
         </section>
