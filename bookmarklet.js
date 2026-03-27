@@ -128,5 +128,5 @@
   };
 
   const payload = encodeBase64Url(JSON.stringify(property));
-  window.location.href = `${APP_URL}?prefill=${payload}`;
+  window.open(`${APP_URL}?prefill=${payload}`, "_blank", "noopener,noreferrer");
 })();
