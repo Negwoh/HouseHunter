@@ -736,41 +736,235 @@ textarea:focus {
 
 @media (max-width: 920px) {
   .app-shell {
-    padding: 16px;
+    padding: 12px;
+  }
+
+  .main-content,
+  .content-grid {
+    gap: 14px;
+  }
+
+  .topbar {
+    gap: 12px;
+    padding-block: 12px;
+  }
+
+  .status-banner {
+    max-width: none;
+    width: 100%;
+    padding: 10px 12px;
+    font-size: 0.92rem;
+  }
+
+  .hero {
+    gap: 18px;
+  }
+
+  .hero h2 {
+    font-size: clamp(1.8rem, 8vw, 2.6rem);
+    max-width: none;
+  }
+
+  .summary-grid,
+  .detail-grid,
+  .detail-timing-grid,
+  .detail-actions {
+    gap: 8px;
+  }
+
+  .summary-grid article,
+  .detail-grid article,
+  .detail-timing-grid article {
+    min-width: calc(50% - 4px);
+    padding: 11px 12px;
+    border-radius: 16px;
+  }
+
+  .summary-grid span,
+  .detail-grid span,
+  .detail-timing-grid span {
+    margin-bottom: 4px;
+    font-size: 0.68rem;
+  }
+
+  .summary-grid strong,
+  .detail-grid strong,
+  .detail-timing-grid strong {
+    font-size: 0.98rem;
   }
 }
 
 @media (max-width: 720px) {
   .panel {
-    padding: 18px;
-    border-radius: 24px;
+    padding: 14px;
+    border-radius: 20px;
   }
 
   .hero {
     min-height: auto;
   }
 
+  .eyebrow {
+    margin-bottom: 6px;
+    font-size: 0.66rem;
+    letter-spacing: 0.14em;
+  }
+
+  .brand .lede {
+    font-size: 0.92rem;
+    line-height: 1.45;
+  }
+
   .timeline-item-button {
     grid-template-columns: 1fr;
-    padding-left: 44px;
+    gap: 12px;
+    padding: 14px 14px 14px 40px;
+    border-radius: 18px;
   }
 
   .timeline-item-actions {
-    padding-left: 44px;
+    gap: 8px;
+    padding-left: 0;
   }
 
   .timeline-expanded {
     margin-left: 0;
+    gap: 14px;
+    padding: 14px;
+    border-radius: 18px;
   }
 
   .summary-grid article,
   .detail-grid article,
   .detail-timing-grid article {
-    min-width: calc(50% - 6px);
+    min-width: calc(50% - 4px);
+  }
+
+  .timeline-item::before {
+    left: 18px;
+  }
+
+  .timeline-item-button::before {
+    left: 12px;
+    top: 20px;
+    width: 11px;
+    height: 11px;
+    box-shadow: 0 0 0 5px rgba(217, 79, 43, 0.12);
+  }
+
+  .timeline-body {
+    gap: 8px;
+  }
+
+  .timeline-header {
+    align-items: start;
+  }
+
+  .timeline-header h3 {
+    font-size: 1rem;
+  }
+
+  .timeline-time {
+    font-size: 1rem;
+  }
+
+  .timeline-window,
+  .timeline-suburb {
+    font-size: 0.8rem;
+  }
+
+  .metric-pill,
+  .source-pill {
+    padding: 6px 9px;
+    font-size: 0.74rem;
+  }
+
+  .chip {
+    padding: 5px 8px;
+    font-size: 0.64rem;
+  }
+
+  .detail-title-block {
+    gap: 6px;
+    padding-bottom: 0;
+  }
+
+  .detail-title-block h2 {
+    font-size: clamp(1.6rem, 8vw, 2.1rem);
+  }
+
+  .detail-section {
+    gap: 10px;
+    padding: 12px;
+    border-radius: 16px;
+  }
+
+  .detail-section h3 {
+    font-size: 0.98rem;
+  }
+
+  .detail-list {
+    gap: 6px;
+    padding-left: 18px;
+    font-size: 0.9rem;
+  }
+
+  .notes-form textarea {
+    min-height: 120px;
+  }
+
+  .primary-button,
+  .ghost-button,
+  .secondary-button {
+    padding: 10px 14px;
+    font-size: 0.92rem;
+  }
+
+  .dialog-form {
+    gap: 14px;
+    padding: 16px;
+    border-radius: 20px;
+  }
+
+  .import-panel {
+    gap: 10px;
+    padding: 12px;
+    border-radius: 16px;
   }
 
   .mini-stats,
   .dialog-grid {
     grid-template-columns: 1fr;
+  }
+
+  input,
+  select,
+  textarea {
+    padding: 11px 12px;
+  }
+}
+
+@media (max-width: 560px) {
+  .app-shell {
+    padding: 10px;
+  }
+
+  .summary-grid article,
+  .detail-grid article,
+  .detail-timing-grid article {
+    min-width: 100%;
+  }
+
+  .detail-actions {
+    gap: 8px;
+  }
+
+  .detail-actions .primary-button,
+  .detail-actions .ghost-button,
+  .detail-actions .secondary-button,
+  .detail-actions .link-button {
+    width: 100%;
+    justify-content: center;
+    text-align: center;
   }
 }
