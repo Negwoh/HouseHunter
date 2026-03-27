@@ -14,6 +14,10 @@ export default {
       return handleGeocode(request, env, url);
     }
 
+    if (url.pathname === "/broadband") {
+      return handleBroadband(request, env, url);
+    }
+
     if (url.pathname === "/batch-import") {
       return handleBatchImport(request, env);
     }
@@ -174,6 +178,36 @@ async function handleGeocode(request, env, url) {
     return json({ matches }, 200, request, env);
   } catch (error) {
     return json({ error: error.message || "Address lookup failed." }, 500, request, env);
+  }
+}
+
+async function handleBroadband(request, env, url) {
+  const lat = Number(url.searchParams.get("lat"));
+  const lng = Number(url.searchParams.get("lng"));
+
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+    return json({ error: "Missing or invalid coordinates." }, 400, request, env);
+  }
+
+  const apiUrl = `https://api-inz.broadbandmap.nz/api/2.0/availability/${lat}/${lng}`;
+
+  try {
+    const response = await fetch(apiUrl, {
+      headers: {
+        "user-agent": "HouseHunterBroadbandWorker/1.0",
+        "accept": "application/json"
+      }
+    });
+
+    const payload = await response.json();
+    if (!response.ok) {
+      return json({ error: payload.error || `Broadband API failed with status ${response.status}.` }, 502, request, env);
+    }
+
+    const broadband = deriveBroadbandSummary(payload, lat, lng);
+    return json({ broadband }, 200, request, env);
+  } catch (error) {
+    return json({ error: error.message || "Broadband lookup failed." }, 500, request, env);
   }
 }
 
@@ -670,6 +704,87 @@ async function geocodeAddress(address, env, limit = 5) {
 function parseDurationSeconds(value) {
   const match = String(value || "").match(/(?<seconds>\d+)s$/);
   return match ? Number(match.groups.seconds) : 0;
+}
+
+function deriveBroadbandSummary(payload, lat, lng) {
+  const pageUrl = `https://broadbandmap.nz/availability/${lat}/${lng}`;
+  const flattened = flattenBroadbandPayload(payload);
+
+  const records = flattened.filter((entry) => /(fibre|fiber|ufb)/i.test(entry.path) || /(fibre|fiber|ufb)/i.test(entry.valueText));
+  const availableRecord = records.find((entry) =>
+    entry.boolValue === true ||
+    /\b(available|connected|live|yes|true|current)\b/i.test(entry.valueText)
+  );
+  const unavailableRecord = records.find((entry) =>
+    entry.boolValue === false ||
+    /\b(unavailable|not available|no|false)\b/i.test(entry.valueText)
+  );
+
+  if (availableRecord) {
+    return {
+      status: "available",
+      label: "Fibre Available",
+      detail: availableRecord.path,
+      pageUrl
+    };
+  }
+
+  if (unavailableRecord) {
+    return {
+      status: "unavailable",
+      label: "Fibre Unavailable",
+      detail: unavailableRecord.path,
+      pageUrl
+    };
+  }
+
+  const payloadText = JSON.stringify(payload);
+  if (/\b(fibre|fiber|ufb)\b/i.test(payloadText) && /\b(available|connected|live)\b/i.test(payloadText)) {
+    return {
+      status: "available",
+      label: "Fibre Available",
+      detail: "Broadband Map API",
+      pageUrl
+    };
+  }
+
+  if (/\b(fibre|fiber|ufb)\b/i.test(payloadText) && /\b(unavailable|not available)\b/i.test(payloadText)) {
+    return {
+      status: "unavailable",
+      label: "Fibre Unavailable",
+      detail: "Broadband Map API",
+      pageUrl
+    };
+  }
+
+  return {
+    status: "unknown",
+    label: "Fibre Unknown",
+    detail: "Open Broadband Map",
+    pageUrl
+  };
+}
+
+function flattenBroadbandPayload(value, path = "root", results = []) {
+  if (Array.isArray(value)) {
+    value.forEach((entry, index) => flattenBroadbandPayload(entry, `${path}[${index}]`, results));
+    return results;
+  }
+
+  if (value && typeof value === "object") {
+    Object.entries(value).forEach(([key, entry]) => {
+      flattenBroadbandPayload(entry, `${path}.${key}`, results);
+    });
+    return results;
+  }
+
+  results.push({
+    path,
+    value,
+    valueText: String(value ?? ""),
+    boolValue: typeof value === "boolean" ? value : null
+  });
+  return results;
 }
 
 function json(payload, status, request, env) {
