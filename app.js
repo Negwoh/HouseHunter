@@ -1,4 +1,5 @@
 const STORAGE_KEY = "house-hunter-day-plan-v2";
+const HOME_STORAGE_KEY = "house-hunter-home-v1";
 const HOUSE_HUNTER_CONFIG = window.HOUSE_HUNTER_CONFIG || {};
 const IMPORT_ENDPOINT = HOUSE_HUNTER_CONFIG.importEndpoint || "";
 const ETA_ENDPOINT = HOUSE_HUNTER_CONFIG.etaEndpoint || (IMPORT_ENDPOINT ? IMPORT_ENDPOINT.replace(/\/import$/, "/eta") : "");
@@ -90,6 +91,7 @@ const state = {
   properties: loadProperties(),
   selectedPropertyId: null,
   currentLocation: null,
+  homeLocation: loadHomeLocation(),
   statusMessage: "Open the day planner and start building your route.",
   routeCache: {},
   pendingRouteRequests: new Set()
@@ -105,6 +107,12 @@ const refs = {
   importListingButton: document.querySelector("#import-listing"),
   importUrlInput: document.querySelector("#import-url"),
   importStatus: document.querySelector("#import-status"),
+  homeForm: document.querySelector("#home-form"),
+  homeAddressInput: document.querySelector("#home-address"),
+  homeLatInput: document.querySelector("#home-lat"),
+  homeLngInput: document.querySelector("#home-lng"),
+  homeStatus: document.querySelector("#home-status"),
+  clearHomeButton: document.querySelector("#clear-home"),
   seedDataButton: document.querySelector("#seed-data"),
   clearAllButton: document.querySelector("#clear-all"),
   refreshLocationButton: document.querySelector("#refresh-location"),
@@ -125,6 +133,7 @@ if (!state.selectedPropertyId && state.properties[0]) {
 }
 
 bindEvents();
+hydrateHomeForm();
 consumeIncomingPayloads();
 renderApp();
 updateLocationStatus("Location not checked yet.");
@@ -133,6 +142,8 @@ registerServiceWorker();
 
 function bindEvents() {
   refs.propertyForm.addEventListener("submit", handleAddProperty);
+  refs.homeForm.addEventListener("submit", handleSaveHomeLocation);
+  refs.clearHomeButton.addEventListener("click", clearHomeLocation);
   refs.addPropertyButton.addEventListener("click", () => refs.propertyDialog.showModal());
   refs.closeDialogButton.addEventListener("click", () => refs.propertyDialog.close());
   refs.importListingButton.addEventListener("click", handleImportListing);
@@ -273,9 +284,15 @@ function updateImportStatus(message, isError = false) {
   refs.importStatus.className = isError ? "danger-text" : "meta-text";
 }
 
+function updateHomeStatus(message, isError = false) {
+  refs.homeStatus.textContent = message;
+  refs.homeStatus.className = isError ? "danger-text" : "meta-text";
+}
+
 function renderApp() {
   state.properties = getSortedProperties(state.properties);
-  const properties = buildAugmentedProperties(state.properties, state.currentLocation, state.routeCache);
+  const routeOrigin = state.currentLocation || state.homeLocation;
+  const properties = buildAugmentedProperties(state.properties, routeOrigin, state.routeCache);
   const selected = properties.find((property) => property.id === state.selectedPropertyId) ?? properties[0] ?? null;
 
   renderSummary(properties);
@@ -584,8 +601,25 @@ function loadProperties() {
   }
 }
 
+function loadHomeLocation() {
+  try {
+    const raw = localStorage.getItem(HOME_STORAGE_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
 function persistProperties(properties) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(properties));
+}
+
+function persistHomeLocation(homeLocation) {
+  if (!homeLocation) {
+    localStorage.removeItem(HOME_STORAGE_KEY);
+    return;
+  }
+  localStorage.setItem(HOME_STORAGE_KEY, JSON.stringify(homeLocation));
 }
 
 function getSortedProperties(properties) {
@@ -824,6 +858,46 @@ function decodeBase64Url(value) {
   const binary = atob(padded);
   const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
   return new TextDecoder().decode(bytes);
+}
+
+function hydrateHomeForm() {
+  if (!state.homeLocation) {
+    updateHomeStatus("Saved home location will be used before live device location.");
+    return;
+  }
+
+  refs.homeAddressInput.value = state.homeLocation.address || "";
+  refs.homeLatInput.value = state.homeLocation.lat ?? "";
+  refs.homeLngInput.value = state.homeLocation.lng ?? "";
+  updateHomeStatus(`Using ${state.homeLocation.address || "saved home location"} as the default route start.`);
+}
+
+function handleSaveHomeLocation(event) {
+  event.preventDefault();
+
+  const address = refs.homeAddressInput.value.trim();
+  const lat = Number(refs.homeLatInput.value);
+  const lng = Number(refs.homeLngInput.value);
+
+  if (!address || !Number.isFinite(lat) || !Number.isFinite(lng)) {
+    updateHomeStatus("Enter a home address plus valid latitude and longitude.", true);
+    return;
+  }
+
+  state.homeLocation = { address, lat, lng };
+  persistHomeLocation(state.homeLocation);
+  updateHomeStatus(`Saved ${address} as your starting location.`);
+  updateAppStatus("Saved home location.");
+  renderApp();
+}
+
+function clearHomeLocation() {
+  state.homeLocation = null;
+  persistHomeLocation(null);
+  refs.homeForm.reset();
+  updateHomeStatus("Cleared saved home location.");
+  updateAppStatus("Cleared home location.");
+  renderApp();
 }
 
 async function importBookmarkletList(listings) {
