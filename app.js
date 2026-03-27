@@ -340,6 +340,10 @@ function renderTimeline(properties, selectedPropertyId) {
       actions.appendChild(buildMapLink("Route To Next", property.toNextMapUrl));
     }
 
+    if (property.listingUrl) {
+      actions.appendChild(buildMapLink("Open Listing", property.listingUrl));
+    }
+
     item.classList.toggle("has-actions", actions.childElementCount > 0);
     refs.timeline.appendChild(fragment);
   });
