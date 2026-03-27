@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>House Hunter</title>
+  <meta name="theme-color" content="#151515">
+  <meta name="description" content="Plan your open-home route, track timing between stops, and capture property notes.">
+  <link rel="manifest" href="./manifest.webmanifest">
+  <link rel="icon" href="./icons/icon-192.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <div class="brand">
+        <p class="eyebrow">Open Home Day Planner</p>
+        <h1>House Hunter</h1>
+        <p class="lede">A proper day-of app for sequencing open homes, tracking drive windows, and saving impressions at each stop.</p>
+      </div>
+
+      <section class="panel route-panel">
+        <div class="panel-heading">
+          <h2>Route Actions</h2>
+        </div>
+        <div class="stack-actions">
+          <button id="open-property-dialog" class="primary-button" type="button">Add Property</button>
+          <button id="seed-data" class="ghost-button" type="button">Load Example Day</button>
+          <button id="clear-all" class="secondary-button" type="button">Clear Plan</button>
+        </div>
+        <p class="meta-text">Travel is always calculated as driving between stops.</p>
+      </section>
+
+      <section class="panel location-panel">
+        <div class="panel-heading">
+          <h2>Live Position</h2>
+          <button id="refresh-location" class="ghost-button" type="button">Refresh</button>
+        </div>
+        <p id="location-status" class="status-text">Location not checked yet.</p>
+        <div class="mini-stats">
+          <article>
+            <span>Mode</span>
+            <strong>Driving</strong>
+          </article>
+          <article>
+            <span>Routing</span>
+            <strong>Straight-line ETA</strong>
+          </article>
+        </div>
+      </section>
+    </aside>
+
+    <main class="main-content">
+      <header class="topbar panel">
+        <div>
+          <p class="eyebrow">Planner Status</p>
+          <h2>Plan the day, run the route, capture the details.</h2>
+        </div>
+        <p id="app-status" class="status-banner">Open the day planner and start building your route.</p>
+      </header>
+
+      <section class="hero panel">
+        <div>
+          <p class="eyebrow">Today's Route</p>
+          <h2 id="day-summary-title">Build your open-home route.</h2>
+          <p id="day-summary-copy">Add properties manually or load the example day to get started.</p>
+        </div>
+        <div class="summary-grid">
+          <article>
+            <span>Total Homes</span>
+            <strong id="stat-total-homes">0</strong>
+          </article>
+          <article>
+            <span>Planned Travel</span>
+            <strong id="stat-total-travel">0 min</strong>
+          </article>
+          <article>
+            <span>Next Leave Time</span>
+            <strong id="stat-next-leave">-</strong>
+          </article>
+          <article>
+            <span>Window Remaining</span>
+            <strong id="stat-window-left">-</strong>
+          </article>
+          <article>
+            <span>Completed</span>
+            <strong id="stat-completed">0</strong>
+          </article>
+        </div>
+      </section>
+
+      <section class="content-grid">
+        <section class="panel itinerary-panel">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">Route</p>
+              <h2>Itinerary</h2>
+            </div>
+          </div>
+          <div id="timeline" class="timeline"></div>
+        </section>
+
+        <section class="panel details-panel">
+          <div id="property-details" class="property-details empty-state">
+            <h2>Select a property</h2>
+            <p>Open a stop from the itinerary to review timing, notes, and checklist items.</p>
+          </div>
+        </section>
+      </section>
+    </main>
+  </div>
+
+  <dialog id="property-dialog" class="property-dialog">
+    <form id="property-form" class="dialog-form">
+      <div class="dialog-header">
+        <div>
+          <p class="eyebrow">New Stop</p>
+          <h2>Add Property</h2>
+        </div>
+        <button id="close-property-dialog" class="ghost-button" type="button">Close</button>
+      </div>
+
+      <div class="dialog-grid">
+        <label>
+          Address
+          <input name="address" type="text" placeholder="12 Kowhai Street, Grey Lynn" required>
+        </label>
+        <label>
+          Suburb
+          <input name="suburb" type="text" placeholder="Grey Lynn">
+        </label>
+        <label>
+          Open Start
+          <input name="openStart" type="time" required>
+        </label>
+        <label>
+          Open End
+          <input name="openEnd" type="time" required>
+        </label>
+        <label>
+          Beds
+          <input name="beds" type="number" min="0" step="1" placeholder="3">
+        </label>
+        <label>
+          Baths
+          <input name="baths" type="number" min="0" step="1" placeholder="2">
+        </label>
+        <label>
+          Parking
+          <input name="parking" type="number" min="0" step="1" placeholder="1">
+        </label>
+        <label>
+          Price Estimate
+          <input name="priceEstimate" type="text" placeholder="$1.55M - $1.65M">
+        </label>
+        <label class="wide-field">
+          Listing URL
+          <input name="listingUrl" type="url" placeholder="https://www.realestate.co.nz/...">
+        </label>
+        <label>
+          Latitude
+          <input name="lat" type="number" step="any" placeholder="-36.8585" required>
+        </label>
+        <label>
+          Longitude
+          <input name="lng" type="number" step="any" placeholder="174.7477" required>
+        </label>
+        <label class="wide-field">
+          Notes
+          <textarea name="notes" rows="4" placeholder="Character villa, renovation needed, check school zone."></textarea>
+        </label>
+        <label class="wide-field">
+          Checklist
+          <textarea name="checklist" rows="4" placeholder="One item per line&#10;Ask for LIM&#10;Check sun in backyard&#10;Inspect roof condition"></textarea>
+        </label>
+      </div>
+
+      <div class="dialog-actions">
+        <button class="primary-button" type="submit">Add To Day</button>
+      </div>
+    </form>
+  </dialog>
+
+  <template id="timeline-item-template">
+    <article class="timeline-item">
+      <button class="timeline-item-button" type="button">
+        <div class="timeline-time-group">
+          <span class="timeline-time"></span>
+          <span class="timeline-window"></span>
+        </div>
+        <div class="timeline-body">
+          <div class="timeline-header">
+            <h3></h3>
+            <span class="chip timeline-status-chip"></span>
+          </div>
+          <p class="timeline-suburb"></p>
+          <div class="timeline-metrics"></div>
+        </div>
+      </button>
+    </article>
+  </template>
+
+  <script src="./app.js"></script>
+</body>
+</html>
