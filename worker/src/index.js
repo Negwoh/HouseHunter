@@ -597,10 +597,26 @@ function firstNonEmpty(...values) {
 function isAllowedListingUrl(value) {
   try {
     const url = new URL(value);
-    return url.hostname === "www.realestate.co.nz" || url.hostname === "realestate.co.nz";
+    if (!(url.hostname === "www.realestate.co.nz" || url.hostname === "realestate.co.nz")) {
+      return false;
+    }
+
+    return isPropertyListingPath(url.pathname);
   } catch {
     return false;
   }
+}
+
+function isPropertyListingPath(pathname) {
+  const normalizedPath = String(pathname || "").toLowerCase();
+  if (!/\/\d{6,}(?:\/|$)/.test(normalizedPath)) {
+    return false;
+  }
+
+  return (
+    /^\/\d{6,}\/(?:residential|rural|lifestyle|commercial|business)\/(?:sale|sold|rental|rent|lease)\//.test(normalizedPath) ||
+    /\/(?:residential|rural|lifestyle|commercial|business)\/(?:sale|sold|rental|rent|lease)\//.test(normalizedPath)
+  );
 }
 
 function buildCorsHeaders(request, env) {

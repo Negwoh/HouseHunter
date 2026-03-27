@@ -180,7 +180,15 @@
   }
 
   function isListingPath(pathname) {
-    return /\/\d{6,}(?:\/|$)/.test(pathname || "");
+    const normalizedPath = String(pathname || "").toLowerCase();
+    if (!/\/\d{6,}(?:\/|$)/.test(normalizedPath)) {
+      return false;
+    }
+
+    return (
+      /^\/\d{6,}\/(?:residential|rural|lifestyle|commercial|business)\/(?:sale|sold|rental|rent|lease)\//.test(normalizedPath) ||
+      /\/(?:residential|rural|lifestyle|commercial|business)\/(?:sale|sold|rental|rent|lease)\//.test(normalizedPath)
+    );
   }
 
   function toCleanListingUrl(rawValue) {
