@@ -948,9 +948,20 @@ async function fetchBroadbandStatus(property) {
     if (response.ok && payload.broadband) {
       state.broadbandCache[key] = payload.broadband;
       renderApp();
+      return;
     }
+
+    state.broadbandCache[key] = {
+      label: "Fibre check unavailable",
+      pageUrl: buildBroadbandMapUrl(property)
+    };
+    renderApp();
   } catch {
-    // Keep fallback label and link when lookup fails.
+    state.broadbandCache[key] = {
+      label: "Fibre check unavailable",
+      pageUrl: buildBroadbandMapUrl(property)
+    };
+    renderApp();
   } finally {
     state.pendingBroadbandRequests.delete(key);
   }

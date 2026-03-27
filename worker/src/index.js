@@ -199,9 +199,19 @@ async function handleBroadband(request, env, url) {
       }
     });
 
-    const payload = await response.json();
+    const rawBody = await response.text();
+    let payload = null;
+    try {
+      payload = rawBody ? JSON.parse(rawBody) : null;
+    } catch {
+      payload = null;
+    }
+
     if (!response.ok) {
-      return json({ error: payload.error || `Broadband API failed with status ${response.status}.` }, 502, request, env);
+      return json({
+        error: payload?.error || `Broadband API failed with status ${response.status}.`,
+        raw: rawBody.slice(0, 200)
+      }, 502, request, env);
     }
 
     const broadband = deriveBroadbandSummary(payload, lat, lng);
