@@ -7,10 +7,12 @@ Current capabilities:
 - add properties through a modal app flow
 - import a `realestate.co.nz` listing URL through a serverless worker
 - use Google Maps traffic-aware drive time estimates when the worker is configured
+- search and save a starting location address for route planning
 - export and import saved plans as JSON files for transfer between devices
 - track the day as a timed driving itinerary
 - click into each stop for timing, checklist, notes, and source links
 - refresh device location for live distance-to-next estimates
+- open Google Maps directions from the previous stop to the current property, and on to the next stop
 - check into a property and see how long you can stay before leaving
 - save likes, dislikes, and follow-up notes per property
 - install the app as a lightweight PWA when hosted over HTTPS
@@ -86,6 +88,7 @@ The export includes:
 
 - The `realestate.co.nz` import requires the worker to be deployed and configured in `config.js`.
 - Travel time is estimated from straight-line distance with a fixed driving speed.
+- Starting-location search and coordinate fallback require the worker plus a Google Maps key with geocoding enabled.
 - There is no backend, auth layer, or multi-user sync yet.
 
 ## realestate.co.nz import setup
@@ -125,6 +128,8 @@ Once `config.js` points at the worker, the `Import Listing` button in the add-pr
 - checklist starter items
 - coordinates when they are present in the page markup
 
+If page coordinates are missing, the worker will also try to geocode the listing address.
+
 ## Google Maps travel-time setup
 
 The worker can also call Google Routes API for better driving ETAs.
@@ -149,6 +154,7 @@ After redeploying, the frontend can call:
 
 - `/import` for listing import
 - `/eta` for traffic-aware driving ETA
+- `/geocode` for starting-location address search and coordinate lookup
 
 The app will still fall back to the straight-line estimate if the worker or Google API is unavailable.
 

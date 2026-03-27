@@ -3,6 +3,7 @@ const HOME_STORAGE_KEY = "house-hunter-home-v1";
 const HOUSE_HUNTER_CONFIG = window.HOUSE_HUNTER_CONFIG || {};
 const IMPORT_ENDPOINT = HOUSE_HUNTER_CONFIG.importEndpoint || "";
 const ETA_ENDPOINT = HOUSE_HUNTER_CONFIG.etaEndpoint || (IMPORT_ENDPOINT ? IMPORT_ENDPOINT.replace(/\/import$/, "/eta") : "");
+const GEOCODE_ENDPOINT = HOUSE_HUNTER_CONFIG.geocodeEndpoint || (IMPORT_ENDPOINT ? IMPORT_ENDPOINT.replace(/\/import$/, "/geocode") : "");
 
 const DRIVING_SPEED_KMH = 38;
 
@@ -13,7 +14,8 @@ const state = {
   homeLocation: loadHomeLocation(),
   statusMessage: "Open the day planner and start building your route.",
   routeCache: {},
-  pendingRouteRequests: new Set()
+  pendingRouteRequests: new Set(),
+  homeSearchResults: []
 };
 
 const refs = {
@@ -28,6 +30,8 @@ const refs = {
   importStatus: document.querySelector("#import-status"),
   homeForm: document.querySelector("#home-form"),
   homeAddressInput: document.querySelector("#home-address"),
+  homeSearchButton: document.querySelector("#search-home-address"),
+  homeSearchResults: document.querySelector("#home-search-results"),
   homeLatInput: document.querySelector("#home-lat"),
   homeLngInput: document.querySelector("#home-lng"),
   homeStatus: document.querySelector("#home-status"),
@@ -64,6 +68,8 @@ registerServiceWorker();
 function bindEvents() {
   refs.propertyForm.addEventListener("submit", handleAddProperty);
   refs.homeForm.addEventListener("submit", handleSaveHomeLocation);
+  refs.homeSearchButton.addEventListener("click", handleSearchHomeAddress);
+  refs.homeSearchResults.addEventListener("change", handleSelectHomeAddress);
   refs.clearHomeButton.addEventListener("click", clearHomeLocation);
   refs.exportPlanButton.addEventListener("click", exportPlan);
   refs.importPlanButton.addEventListener("click", () => refs.importPlanFileInput.click());
@@ -88,7 +94,7 @@ function bindEvents() {
   refs.refreshLocationButton.addEventListener("click", requestCurrentLocation);
 }
 
-function handleAddProperty(event) {
+async function handleAddProperty(event) {
   event.preventDefault();
   const formData = new FormData(event.currentTarget);
   const checklist = String(formData.get("checklist"))
@@ -97,18 +103,47 @@ function handleAddProperty(event) {
     .filter(Boolean);
 
   const listingUrl = String(formData.get("listingUrl")).trim();
+  const address = String(formData.get("address")).trim();
+  const suburb = String(formData.get("suburb")).trim();
+  let lat = parseCoordinateValue(formData.get("lat"));
+  let lng = parseCoordinateValue(formData.get("lng"));
+
+  if ((!hasCoordinates({ lat, lng })) && address && GEOCODE_ENDPOINT) {
+    try {
+      const [match] = await lookupAddressCandidates(address, 1);
+      if (match) {
+        lat = match.lat;
+        lng = match.lng;
+        setFormValue("lat", lat);
+        setFormValue("lng", lng);
+      }
+    } catch {
+      // Fall back to manual entry validation below.
+    }
+  }
+
+  if (!address) {
+    updateAppStatus("Enter an address before adding the property.");
+    return;
+  }
+
+  if (!hasCoordinates({ lat, lng })) {
+    updateAppStatus("Add coordinates or use an address search so routing can work for this property.");
+    return;
+  }
+
   const property = {
     id: crypto.randomUUID(),
-    address: String(formData.get("address")).trim(),
-    suburb: String(formData.get("suburb")).trim(),
+    address,
+    suburb,
     openStart: String(formData.get("openStart")),
     openEnd: String(formData.get("openEnd")),
     beds: Number(formData.get("beds")) || 0,
     baths: Number(formData.get("baths")) || 0,
     parking: Number(formData.get("parking")) || 0,
     sectionSize: String(formData.get("sectionSize")).trim(),
-    lat: Number(formData.get("lat")),
-    lng: Number(formData.get("lng")),
+    lat,
+    lng,
     priceEstimate: String(formData.get("priceEstimate")).trim() || "Estimate not added",
     listingUrl,
     notes: String(formData.get("notes")).trim(),
@@ -262,6 +297,7 @@ function renderTimeline(properties, selectedPropertyId) {
 
   properties.forEach((property) => {
     const fragment = refs.timelineTemplate.content.cloneNode(true);
+    const item = fragment.querySelector(".timeline-item");
     const button = fragment.querySelector(".timeline-item-button");
     const title = fragment.querySelector("h3");
     const timelineTime = fragment.querySelector(".timeline-time");
@@ -269,6 +305,7 @@ function renderTimeline(properties, selectedPropertyId) {
     const suburb = fragment.querySelector(".timeline-suburb");
     const statusChip = fragment.querySelector(".timeline-status-chip");
     const metrics = fragment.querySelector(".timeline-metrics");
+    const actions = fragment.querySelector(".timeline-item-actions");
 
     button.classList.toggle("selected", property.id === selectedPropertyId);
     button.addEventListener("click", () => {
@@ -286,7 +323,7 @@ function renderTimeline(properties, selectedPropertyId) {
     [
       `${property.beds} bd`,
       `${property.baths} ba`,
-      `${property.travelFromPreviousMinutes} min drive`,
+      property.travelFromPreviousLabel,
       property.currentTravelLabel
     ].forEach((text) => {
       const pill = document.createElement("span");
@@ -295,6 +332,15 @@ function renderTimeline(properties, selectedPropertyId) {
       metrics.appendChild(pill);
     });
 
+    if (property.fromPreviousMapUrl) {
+      actions.appendChild(buildMapLink("Route Here", property.fromPreviousMapUrl));
+    }
+
+    if (property.toNextMapUrl) {
+      actions.appendChild(buildMapLink("Route To Next", property.toNextMapUrl));
+    }
+
+    item.classList.toggle("has-actions", actions.childElementCount > 0);
     refs.timeline.appendChild(fragment);
   });
 }
@@ -329,6 +375,8 @@ function renderDetails(selected) {
       <button id="arrive-button" class="primary-button" type="button">${selected.status === "current" ? "Mark As Done" : "Check In Now"}</button>
       <button id="remove-button" class="secondary-button" type="button">Remove Stop</button>
       ${selected.listingUrl ? `<a class="secondary-button link-button" href="${selected.listingUrl}" target="_blank" rel="noreferrer">Open Listing</a>` : ""}
+      ${selected.fromPreviousMapUrl ? `<a class="secondary-button link-button" href="${selected.fromPreviousMapUrl}" target="_blank" rel="noreferrer">Route Here</a>` : ""}
+      ${selected.toNextMapUrl ? `<a class="secondary-button link-button" href="${selected.toNextMapUrl}" target="_blank" rel="noreferrer">Route To Next</a>` : ""}
     </div>
 
     <section class="detail-section">
@@ -338,8 +386,8 @@ function renderDetails(selected) {
       </div>
       <div class="detail-timing-grid">
         <article><span>Open Window</span><strong>${escapeHtml(selected.openStart)} - ${escapeHtml(selected.openEnd)}</strong></article>
-        <article><span>Drive From Previous</span><strong>${selected.travelFromPreviousMinutes} min</strong></article>
-        <article><span>Distance From You</span><strong>${escapeHtml(selected.distanceFromCurrentLabel)}</strong></article>
+        <article><span>${escapeHtml(selected.travelFromPreviousTitle)}</span><strong>${escapeHtml(selected.travelFromPreviousValue)}</strong></article>
+        <article><span>${escapeHtml(selected.distanceFromCurrentTitle)}</span><strong>${escapeHtml(selected.distanceFromCurrentLabel)}</strong></article>
         <article><span>Leave By</span><strong>${escapeHtml(selected.leaveByLabel)}</strong></article>
       </div>
       <p class="${selected.leaveWarningClass}">${escapeHtml(selected.leaveMessage)}</p>
@@ -474,6 +522,39 @@ function setFormValue(name, value) {
   }
 }
 
+async function enrichImportedDraft(property) {
+  if (!property?.listingUrl || !IMPORT_ENDPOINT) {
+    return property;
+  }
+
+  try {
+    const response = await fetch(`${IMPORT_ENDPOINT}?url=${encodeURIComponent(property.listingUrl)}`);
+    const payload = await response.json();
+    if (response.ok && payload.property) {
+      return {
+        ...property,
+        ...payload.property,
+        listingUrl: property.listingUrl
+      };
+    }
+  } catch {
+    // Keep the bookmarklet payload when the worker is unavailable.
+  }
+
+  return property;
+}
+
+async function lookupAddressCandidates(address, limit = 5) {
+  const response = await fetch(`${GEOCODE_ENDPOINT}?address=${encodeURIComponent(address)}&limit=${limit}`);
+  const payload = await response.json();
+
+  if (!response.ok) {
+    throw new Error(payload.error || "Address search failed.");
+  }
+
+  return Array.isArray(payload.matches) ? payload.matches : [];
+}
+
 async function consumeIncomingPayloads() {
   const url = new URL(window.location.href);
   const payload = url.searchParams.get("prefill");
@@ -482,9 +563,9 @@ async function consumeIncomingPayloads() {
 
   if (payload) {
     try {
-      const parsed = JSON.parse(decodeBase64Url(payload));
+      const parsed = await enrichImportedDraft(JSON.parse(decodeBase64Url(payload)));
       populateFormFromImport(parsed, parsed.listingUrl || "");
-      refs.importUrlInput.value = parsed.listingUrl || "";
+      refs.importUrlInput.value = parsed.listingUrl || parsed.sourceUrl || "";
       updateImportStatus("Imported property draft from bookmarklet. Review the fields, then add it to the day.");
       refs.propertyDialog.showModal();
       updateAppStatus("Loaded a property draft from the bookmarklet.");
@@ -569,37 +650,44 @@ function buildAugmentedProperties(properties, currentLocation, routeCache) {
   return sorted.map((property, index) => {
     const previousProperty = sorted[index - 1];
     const nextProperty = sorted[index + 1];
-    const distanceFromPreviousKm = previousProperty ? haversineKm(previousProperty, property) : 0;
-    const previousRoute = previousProperty ? getCachedRoute(previousProperty, property, routeCache) : null;
-    const travelFromPreviousMinutes = previousProperty
-      ? previousRoute?.durationMinutes ?? estimateTravelMinutes(distanceFromPreviousKm)
+    const previousOrigin = previousProperty || (index === 0 ? state.homeLocation : null);
+    const previousOriginLabel = previousProperty ? "Previous Stop" : previousOrigin ? "Starting Location" : "Start";
+    const distanceFromPreviousKm = hasCoordinates(previousOrigin) && hasCoordinates(property) ? haversineKm(previousOrigin, property) : null;
+    const previousRoute = hasCoordinates(previousOrigin) && hasCoordinates(property) ? getCachedRoute(previousOrigin, property, routeCache) : null;
+    const travelFromPreviousMinutes = previousOrigin
+      ? previousRoute?.durationMinutes ?? (distanceFromPreviousKm == null ? null : estimateTravelMinutes(distanceFromPreviousKm))
       : 0;
 
     const currentOrigin = currentIndex === -1 || index <= currentIndex ? currentLocation : sorted[currentIndex];
-    const distanceFromCurrentKm = currentOrigin ? haversineKm(currentOrigin, property) : null;
-    const currentRoute = currentOrigin ? getCachedRoute(currentOrigin, property, routeCache) : null;
+    const distanceFromCurrentKm = hasCoordinates(currentOrigin) && hasCoordinates(property) ? haversineKm(currentOrigin, property) : null;
+    const currentRoute = hasCoordinates(currentOrigin) && hasCoordinates(property) ? getCachedRoute(currentOrigin, property, routeCache) : null;
     const distanceFromCurrentLabel = currentRoute
       ? currentRoute.distanceLabel
       : distanceFromCurrentKm == null
-        ? "Location needed"
+        ? state.homeLocation
+          ? "Save or refresh a location"
+          : "Location needed"
         : `${distanceFromCurrentKm.toFixed(1)} km away`;
     const currentTravelLabel = currentRoute
-      ? `${currentRoute.durationMinutes} min from you`
+      ? `${currentRoute.durationMinutes} min from ${state.currentLocation ? "you" : "start"}`
       : distanceFromCurrentKm == null
-        ? "Location needed"
-        : `${distanceFromCurrentKm.toFixed(1)} km away`;
+        ? state.homeLocation
+          ? "Start location needed"
+          : "Location needed"
+        : `${estimateTravelMinutes(distanceFromCurrentKm)} min from ${state.currentLocation ? "you" : "start"}`;
 
     const openStartDate = combineWithToday(property.openStart);
     const openEndDate = combineWithToday(property.openEnd);
-    const nextRoute = nextProperty ? getCachedRoute(property, nextProperty, routeCache) : null;
+    const nextRoute = hasCoordinates(property) && hasCoordinates(nextProperty) ? getCachedRoute(property, nextProperty, routeCache) : null;
     const nextTravelMinutes = nextProperty
-      ? nextRoute?.durationMinutes ?? estimateTravelMinutes(haversineKm(property, nextProperty))
+      ? nextRoute?.durationMinutes ?? (hasCoordinates(property) && hasCoordinates(nextProperty) ? estimateTravelMinutes(haversineKm(property, nextProperty)) : 0)
       : 0;
     const leaveByDate = nextProperty
       ? new Date(combineWithToday(nextProperty.openStart).getTime() - nextTravelMinutes * 60000)
       : openEndDate;
 
-    const departureLabel = formatClockTime(dateToTimeString(new Date(openStartDate.getTime() - travelFromPreviousMinutes * 60000)));
+    const computedTravelFromPreviousMinutes = travelFromPreviousMinutes ?? 0;
+    const departureLabel = formatClockTime(dateToTimeString(new Date(openStartDate.getTime() - computedTravelFromPreviousMinutes * 60000)));
     const arrivalLabel = formatClockTime(property.openStart);
     const timeRemainingMinutes = Math.max(0, Math.round((openEndDate.getTime() - now.getTime()) / 60000));
     const openWindowLabel = `${Math.max(0, Math.round((openEndDate.getTime() - openStartDate.getTime()) / 60000))} min window`;
@@ -610,7 +698,19 @@ function buildAugmentedProperties(properties, currentLocation, routeCache) {
       ...property,
       previousProperty,
       nextProperty,
-      travelFromPreviousMinutes,
+      travelFromPreviousMinutes: computedTravelFromPreviousMinutes,
+      travelFromPreviousLabel: previousOrigin
+        ? travelFromPreviousMinutes == null
+          ? `${previousOriginLabel} needed`
+          : `${travelFromPreviousMinutes} min drive`
+        : "Start here",
+      travelFromPreviousTitle: previousOrigin ? `Drive From ${previousOriginLabel}` : "Starting Stop",
+      travelFromPreviousValue: previousOrigin
+        ? travelFromPreviousMinutes == null
+          ? "Coordinates needed"
+          : `${travelFromPreviousMinutes} min`
+        : "Start here",
+      distanceFromCurrentTitle: state.currentLocation ? "Distance From You" : "Distance From Start",
       distanceFromCurrentLabel,
       departureLabel,
       arrivalLabel,
@@ -620,10 +720,14 @@ function buildAugmentedProperties(properties, currentLocation, routeCache) {
       leaveMessage: buildLeaveMessage(property.status, leaveDeltaMinutes, timeRemainingMinutes, nextProperty),
       leaveWarningClass: leaveDeltaMinutes < 0 ? "danger-text" : leaveDeltaMinutes <= 10 ? "warning-text" : "meta-text",
       currentTravelLabel,
+      fromPreviousMapUrl: buildGoogleMapsDirectionsUrl(previousOrigin, property),
+      toNextMapUrl: buildGoogleMapsDirectionsUrl(property, nextProperty),
       liveEtaDetail: currentRoute
         ? `Live Google route estimate: ${currentRoute.durationLabel}, ${currentRoute.distanceLabel}.`
-        : currentLocation
+        : state.currentLocation
           ? "Live drive ETA will improve once the Google route service responds."
+          : state.homeLocation
+            ? "Saved starting location is being used until you refresh live position."
           : "Refresh live position to see drive ETA from your current location."
     };
   });
@@ -638,19 +742,19 @@ function prefetchBetterEtas(properties) {
 
   properties.forEach((property, index) => {
     const previousProperty = properties[index - 1];
-    if (previousProperty) {
+    if (hasCoordinates(previousProperty) && hasCoordinates(property)) {
       fetchBetterEta(previousProperty, property);
     }
 
-    const currentOrigin = currentIndex === -1 || index <= currentIndex ? state.currentLocation : properties[currentIndex];
-    if (currentOrigin) {
+    const currentOrigin = currentIndex === -1 || index <= currentIndex ? (state.currentLocation || state.homeLocation) : properties[currentIndex];
+    if (hasCoordinates(currentOrigin) && hasCoordinates(property)) {
       fetchBetterEta(currentOrigin, property);
     }
   });
 }
 
 async function fetchBetterEta(origin, destination) {
-  if (!origin || !destination) {
+  if (!hasCoordinates(origin) || !hasCoordinates(destination)) {
     return;
   }
 
@@ -693,6 +797,54 @@ function getCachedRoute(origin, destination, routeCache) {
 
 function roundCoord(value) {
   return Number(value).toFixed(5);
+}
+
+function parseCoordinateValue(value) {
+  if (value === "" || value == null) {
+    return "";
+  }
+
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : "";
+}
+
+function hasCoordinates(value) {
+  return Boolean(value) && Number.isFinite(Number(value.lat)) && Number.isFinite(Number(value.lng));
+}
+
+function buildGoogleMapsDirectionsUrl(origin, destination) {
+  if (!destination || (!hasCoordinates(destination) && !destination.address)) {
+    return "";
+  }
+
+  const url = new URL("https://www.google.com/maps/dir/");
+  const params = url.searchParams;
+  params.set("api", "1");
+  params.set("travelmode", "driving");
+  params.set("destination", buildMapsLocationValue(destination));
+
+  if (origin && (hasCoordinates(origin) || origin.address)) {
+    params.set("origin", buildMapsLocationValue(origin));
+  }
+
+  return url.toString();
+}
+
+function buildMapsLocationValue(value) {
+  if (hasCoordinates(value)) {
+    return `${value.lat},${value.lng}`;
+  }
+  return String(value.address || "").trim();
+}
+
+function buildMapLink(label, url) {
+  const link = document.createElement("a");
+  link.className = "secondary-button link-button";
+  link.href = url;
+  link.target = "_blank";
+  link.rel = "noreferrer";
+  link.textContent = label;
+  return link;
 }
 
 function buildLeaveMessage(status, leaveDeltaMinutes, timeRemainingMinutes, nextProperty) {
@@ -782,12 +934,14 @@ function decodeBase64Url(value) {
 function hydrateHomeForm() {
   if (!state.homeLocation) {
     updateHomeStatus("Saved home location will be used before live device location.");
+    refs.homeSearchResults.innerHTML = '<option value="">Search for an address to choose a match</option>';
     return;
   }
 
   refs.homeAddressInput.value = state.homeLocation.address || "";
   refs.homeLatInput.value = state.homeLocation.lat ?? "";
   refs.homeLngInput.value = state.homeLocation.lng ?? "";
+  refs.homeSearchResults.innerHTML = '<option value="">Search for an address to choose a match</option>';
   updateHomeStatus(`Using ${state.homeLocation.address || "saved home location"} as the default route start.`);
 }
 
@@ -795,11 +949,11 @@ function handleSaveHomeLocation(event) {
   event.preventDefault();
 
   const address = refs.homeAddressInput.value.trim();
-  const lat = Number(refs.homeLatInput.value);
-  const lng = Number(refs.homeLngInput.value);
+  const lat = parseCoordinateValue(refs.homeLatInput.value);
+  const lng = parseCoordinateValue(refs.homeLngInput.value);
 
-  if (!address || !Number.isFinite(lat) || !Number.isFinite(lng)) {
-    updateHomeStatus("Enter a home address plus valid latitude and longitude.", true);
+  if (!address || !hasCoordinates({ lat, lng })) {
+    updateHomeStatus("Search for an address or enter a home address with valid latitude and longitude.", true);
     return;
   }
 
@@ -812,11 +966,62 @@ function handleSaveHomeLocation(event) {
 
 function clearHomeLocation() {
   state.homeLocation = null;
+  state.homeSearchResults = [];
   persistHomeLocation(null);
   refs.homeForm.reset();
+  refs.homeSearchResults.innerHTML = '<option value="">Search for an address to choose a match</option>';
   updateHomeStatus("Cleared saved home location.");
   updateAppStatus("Cleared home location.");
   renderApp();
+}
+
+async function handleSearchHomeAddress() {
+  const address = refs.homeAddressInput.value.trim();
+
+  if (!address) {
+    updateHomeStatus("Enter an address to search.", true);
+    return;
+  }
+
+  if (!GEOCODE_ENDPOINT) {
+    updateHomeStatus("No address search endpoint is configured. Redeploy the worker to enable it.", true);
+    return;
+  }
+
+  refs.homeSearchButton.disabled = true;
+  updateHomeStatus("Searching for address matches...");
+
+  try {
+    const matches = await lookupAddressCandidates(address, 5);
+    state.homeSearchResults = matches;
+    refs.homeSearchResults.innerHTML = '<option value="">Choose an address match</option>';
+
+    matches.forEach((match, index) => {
+      const option = document.createElement("option");
+      option.value = String(index);
+      option.textContent = match.address;
+      refs.homeSearchResults.appendChild(option);
+    });
+
+    updateHomeStatus(matches.length ? "Choose the closest address match, then save it." : "No address matches found.", !matches.length);
+  } catch (error) {
+    updateHomeStatus(error.message || "Address search failed.", true);
+  } finally {
+    refs.homeSearchButton.disabled = false;
+  }
+}
+
+function handleSelectHomeAddress(event) {
+  const index = Number(event.target.value);
+  const match = state.homeSearchResults[index];
+  if (!match) {
+    return;
+  }
+
+  refs.homeAddressInput.value = match.address;
+  refs.homeLatInput.value = match.lat;
+  refs.homeLngInput.value = match.lng;
+  updateHomeStatus(`Selected ${match.address}. Save Home to use it as your route start.`);
 }
 
 function exportPlan() {
@@ -887,8 +1092,8 @@ function normalizeImportedProperty(property) {
     baths: Number(property.baths) || 0,
     parking: Number(property.parking) || 0,
     sectionSize: String(property.sectionSize || "").trim(),
-    lat: property.lat === "" || property.lat == null ? "" : Number(property.lat),
-    lng: property.lng === "" || property.lng == null ? "" : Number(property.lng),
+    lat: parseCoordinateValue(property.lat),
+    lng: parseCoordinateValue(property.lng),
     priceEstimate: String(property.priceEstimate || "").trim(),
     listingUrl: String(property.listingUrl || "").trim(),
     notes: String(property.notes || "").trim(),
@@ -960,8 +1165,8 @@ function buildPropertyFromImport(property, listingUrl, fallbackTitle = "") {
     baths: Number(property.baths) || 0,
     parking: Number(property.parking) || 0,
     sectionSize: String(property.sectionSize || "").trim(),
-    lat: property.lat === "" || property.lat == null ? "" : Number(property.lat),
-    lng: property.lng === "" || property.lng == null ? "" : Number(property.lng),
+    lat: parseCoordinateValue(property.lat),
+    lng: parseCoordinateValue(property.lng),
     priceEstimate: String(property.priceEstimate || "Imported listing").trim(),
     listingUrl,
     notes: String(property.notes || "").trim(),

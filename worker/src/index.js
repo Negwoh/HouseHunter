@@ -10,6 +10,10 @@ export default {
       return handleEta(request, env, url);
     }
 
+    if (url.pathname === "/geocode") {
+      return handleGeocode(request, env, url);
+    }
+
     if (url.pathname !== "/import") {
       return json({ error: "Not found." }, 404, request, env);
     }
@@ -35,7 +39,7 @@ export default {
       }
 
       const html = await response.text();
-      const property = parseListing(html, listingUrl);
+      const property = await parseListing(html, listingUrl, env);
       return json({ property }, 200, request, env);
     } catch (error) {
       return json({ error: error.message || "Failed to import listing." }, 500, request, env);
@@ -99,7 +103,27 @@ async function handleEta(request, env, url) {
   }
 }
 
-function parseListing(html, listingUrl) {
+async function handleGeocode(request, env, url) {
+  if (!env.GOOGLE_MAPS_API_KEY) {
+    return json({ error: "GOOGLE_MAPS_API_KEY is not configured." }, 500, request, env);
+  }
+
+  const address = String(url.searchParams.get("address") || "").trim();
+  const limit = Math.min(10, Math.max(1, Number(url.searchParams.get("limit")) || 5));
+
+  if (!address) {
+    return json({ error: "Missing address parameter." }, 400, request, env);
+  }
+
+  try {
+    const matches = await geocodeAddress(address, env, limit);
+    return json({ matches }, 200, request, env);
+  } catch (error) {
+    return json({ error: error.message || "Address lookup failed." }, 500, request, env);
+  }
+}
+
+async function parseListing(html, listingUrl, env) {
   const jsonLd = extractJsonLd(html);
   const address = firstNonEmpty(
     jsonLd && jsonLd.address && formatAddress(jsonLd.address),
@@ -115,13 +139,20 @@ function parseListing(html, listingUrl) {
 
   const text = stripTags(html);
   const openWindow = extractOpenHomeWindow(text);
-  const facts = extractPropertyFactsV2(text);
-  const coordinates = extractCoordinatesV2(html, jsonLd);
+  const facts = mergePropertyFacts(extractPropertyFactsFromHtmlV3(html), extractPropertyFactsV2(text));
+  let coordinates = extractCoordinatesV2(html, jsonLd);
   const priceEstimate = firstNonEmpty(
     extractPrice(text),
     extractMeta(html, "og:description"),
     ""
   );
+
+  if (!hasCoordinates(coordinates) && cleanAddress(address) && env.GOOGLE_MAPS_API_KEY) {
+    const [match] = await geocodeAddress(cleanAddress(address), env, 1);
+    if (match) {
+      coordinates = { lat: match.lat, lng: match.lng };
+    }
+  }
 
   return {
     address: cleanAddress(address),
@@ -197,6 +228,44 @@ function extractPrice(text) {
 function extractNumber(text, regex) {
   const match = text.match(regex);
   return match ? Number(match[1]) : 0;
+}
+
+function extractPropertyFactsFromHtmlV3(html) {
+  return {
+    beds: firstMatchingNumberV2(html, [
+      /"bedrooms?"\s*:\s*"?(\d+)/i,
+      /"numBedrooms?"\s*:\s*"?(\d+)/i,
+      /\bbedrooms?\b[^0-9]{0,20}(\d+)\b/i,
+      /\b(\d+)\s*(?:bed|bedroom|bedrooms)\b/i
+    ]),
+    baths: firstMatchingNumberV2(html, [
+      /"bathrooms?"\s*:\s*"?(\d+)/i,
+      /"numBathrooms?"\s*:\s*"?(\d+)/i,
+      /\bbath(?:room)?s?\b[^0-9]{0,20}(\d+)\b/i,
+      /\b(\d+)\s*(?:bath|bathroom|bathrooms)\b/i
+    ]),
+    parking: firstMatchingNumberV2(html, [
+      /"parking"\s*:\s*"?(\d+)/i,
+      /"garages?"\s*:\s*"?(\d+)/i,
+      /\bparking\b[^0-9]{0,20}(\d+)\b/i,
+      /\bgarages?\b[^0-9]{0,20}(\d+)\b/i,
+      /\b(\d+)\s*(?:car\s*park|carparks?|garage|garages|parking|parks?)\b/i
+    ]),
+    sectionSize: firstMatchingTextV2(html, [
+      /\b(?:land|section|site)\s*(?:area|size)?[^0-9]{0,20}(\d+(?:\.\d+)?)\s*(m2|m\u00b2|sqm|ha)\b/i,
+      /"land(?:Area|Size)"\s*:\s*"?(\d+(?:\.\d+)?)\s*(m2|m\u00b2|sqm|ha)\b/i,
+      /\b(\d+(?:\.\d+)?)\s*(m2|m\u00b2|sqm|ha)\s*(?:land|section|site)\b/i
+    ])
+  };
+}
+
+function mergePropertyFacts(primary, fallback) {
+  return {
+    beds: primary.beds || fallback.beds || 0,
+    baths: primary.baths || fallback.baths || 0,
+    parking: primary.parking || fallback.parking || 0,
+    sectionSize: primary.sectionSize || fallback.sectionSize || ""
+  };
 }
 
 function extractPropertyFactsV2(text) {
@@ -465,6 +534,32 @@ function readLatLng(url, latKey, lngKey) {
   }
 
   return { latitude: lat, longitude: lng };
+}
+
+function hasCoordinates(value) {
+  return Boolean(value) && Number.isFinite(Number(value.lat)) && Number.isFinite(Number(value.lng));
+}
+
+async function geocodeAddress(address, env, limit = 5) {
+  const url = new URL("https://maps.googleapis.com/maps/api/geocode/json");
+  url.searchParams.set("address", address);
+  url.searchParams.set("key", env.GOOGLE_MAPS_API_KEY);
+  url.searchParams.set("region", "nz");
+
+  const response = await fetch(url.toString());
+  const payload = await response.json();
+
+  if (!response.ok || payload.status === "REQUEST_DENIED" || payload.status === "INVALID_REQUEST") {
+    throw new Error(payload.error_message || "Google Geocoding API request failed.");
+  }
+
+  const results = Array.isArray(payload.results) ? payload.results.slice(0, limit) : [];
+  return results.map((result) => ({
+    address: result.formatted_address || address,
+    lat: Number(result.geometry?.location?.lat),
+    lng: Number(result.geometry?.location?.lng),
+    placeId: result.place_id || ""
+  })).filter((result) => hasCoordinates(result));
 }
 
 function parseDurationSeconds(value) {

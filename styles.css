@@ -317,6 +317,7 @@ label {
 }
 
 input,
+select,
 textarea {
   width: 100%;
   padding: 13px 14px;
@@ -333,11 +334,16 @@ textarea::placeholder {
 }
 
 input:focus,
+select:focus,
 textarea:focus {
   outline: none;
   border-color: rgba(217, 79, 43, 0.36);
   box-shadow: 0 0 0 4px rgba(217, 79, 43, 0.12);
   background: #fffdfa;
+}
+
+#home-search-results {
+  min-height: 48px;
 }
 
 .primary-button,
@@ -393,6 +399,11 @@ textarea:focus {
   position: relative;
 }
 
+.timeline-item.has-actions {
+  display: grid;
+  gap: 10px;
+}
+
 .timeline-item::before {
   content: "";
   position: absolute;
@@ -443,6 +454,13 @@ textarea:focus {
   box-shadow:
     var(--shadow-md),
     inset 0 0 0 1px rgba(217, 79, 43, 0.16);
+}
+
+.timeline-item-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding-left: 142px;
 }
 
 .timeline-time {
@@ -677,6 +695,10 @@ textarea:focus {
 
   .timeline-item-button {
     grid-template-columns: 1fr;
+    padding-left: 44px;
+  }
+
+  .timeline-item-actions {
     padding-left: 44px;
   }
 
