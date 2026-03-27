@@ -5,6 +5,8 @@ const IMPORT_ENDPOINT = HOUSE_HUNTER_CONFIG.importEndpoint || "";
 const BATCH_IMPORT_ENDPOINT = HOUSE_HUNTER_CONFIG.batchImportEndpoint || (IMPORT_ENDPOINT ? IMPORT_ENDPOINT.replace(/\/import$/, "/batch-import") : "");
 const ETA_ENDPOINT = HOUSE_HUNTER_CONFIG.etaEndpoint || (IMPORT_ENDPOINT ? IMPORT_ENDPOINT.replace(/\/import$/, "/eta") : "");
 const GEOCODE_ENDPOINT = HOUSE_HUNTER_CONFIG.geocodeEndpoint || (IMPORT_ENDPOINT ? IMPORT_ENDPOINT.replace(/\/import$/, "/geocode") : "");
+const LOCATION_REFRESH_SECONDS = Math.max(5, Number(HOUSE_HUNTER_CONFIG.locationRefreshSeconds) || 10);
+const MOBILE_LAYOUT_QUERY = "(max-width: 1180px)";
 
 const DRIVING_SPEED_KMH = 38;
 
@@ -16,7 +18,8 @@ const state = {
   statusMessage: "Open the day planner and start building your route.",
   routeCache: {},
   pendingRouteRequests: new Set(),
-  homeSearchResults: []
+  homeSearchResults: [],
+  locationRefreshTimer: null
 };
 
 const refs = {
@@ -47,6 +50,7 @@ const refs = {
   clearAllButton: document.querySelector("#clear-all"),
   refreshLocationButton: document.querySelector("#refresh-location"),
   locationStatus: document.querySelector("#location-status"),
+  locationRefreshInterval: document.querySelector("#location-refresh-interval"),
   appStatus: document.querySelector("#app-status"),
   daySummaryTitle: document.querySelector("#day-summary-title"),
   daySummaryCopy: document.querySelector("#day-summary-copy"),
@@ -72,6 +76,8 @@ updateAppStatus(state.statusMessage);
 registerServiceWorker();
 window.setInterval(renderCurrentTime, 30000);
 renderCurrentTime();
+hydrateLocationRefreshUI();
+startLocationAutoRefresh();
 
 function bindEvents() {
   refs.openSidebarButton.addEventListener("click", openSidebar);
@@ -103,6 +109,7 @@ function bindEvents() {
   });
 
   refs.refreshLocationButton.addEventListener("click", requestCurrentLocation);
+  window.matchMedia(MOBILE_LAYOUT_QUERY).addEventListener("change", () => renderApp());
 }
 
 function openSidebar() {
@@ -223,13 +230,20 @@ async function handleImportListing() {
   }
 }
 
-function requestCurrentLocation() {
+function requestCurrentLocation(options = {}) {
+  const silent = Boolean(options.silent);
+
   if (!navigator.geolocation) {
-    updateLocationStatus("Geolocation is not supported in this browser.");
+    if (!silent) {
+      updateLocationStatus("Geolocation is not supported in this browser.");
+    }
     return;
   }
 
-  updateLocationStatus("Checking device position...");
+  if (!silent) {
+    updateLocationStatus("Checking device position...");
+  }
+
   navigator.geolocation.getCurrentPosition(
     (position) => {
       state.currentLocation = {
@@ -237,11 +251,17 @@ function requestCurrentLocation() {
         lng: position.coords.longitude,
         capturedAt: new Date()
       };
-      updateLocationStatus("Live position updated. Distance-to-next estimates now use your device location.");
-      updateAppStatus("Live position refreshed.");
+      updateLocationStatus(`Live position updated at ${formatClockTime(dateToTimeString(state.currentLocation.capturedAt))}.`);
+      if (!silent) {
+        updateAppStatus("Live position refreshed.");
+      }
       renderApp();
     },
-    () => updateLocationStatus("Location access was denied or unavailable."),
+    () => {
+      if (!silent) {
+        updateLocationStatus("Location access was denied or unavailable.");
+      }
+    },
     {
       enableHighAccuracy: true,
       timeout: 10000
@@ -266,6 +286,29 @@ function updateImportStatus(message, isError = false) {
 function updateHomeStatus(message, isError = false) {
   refs.homeStatus.textContent = message;
   refs.homeStatus.className = isError ? "danger-text" : "meta-text";
+}
+
+function hydrateLocationRefreshUI() {
+  if (refs.locationRefreshInterval) {
+    refs.locationRefreshInterval.textContent = `${LOCATION_REFRESH_SECONDS}s auto`;
+  }
+}
+
+function startLocationAutoRefresh() {
+  if (!navigator.geolocation) {
+    return;
+  }
+
+  requestCurrentLocation({ silent: true });
+  state.locationRefreshTimer = window.setInterval(() => {
+    if (document.visibilityState === "visible") {
+      requestCurrentLocation({ silent: true });
+    }
+  }, LOCATION_REFRESH_SECONDS * 1000);
+}
+
+function isMobileLayout() {
+  return window.matchMedia(MOBILE_LAYOUT_QUERY).matches;
 }
 
 function renderApp() {
@@ -381,22 +424,40 @@ function renderTimeline(properties, selectedPropertyId) {
       actions.appendChild(buildMapLink("Check Fibre", property.broadbandMapUrl));
     }
 
+    if (isMobileLayout() && property.id === selectedPropertyId) {
+      item.classList.add("has-expanded-details");
+      const expanded = document.createElement("div");
+      expanded.className = "timeline-expanded";
+      populatePropertyDetails(expanded, property);
+      item.appendChild(expanded);
+    }
+
     item.classList.toggle("has-actions", actions.childElementCount > 0);
     refs.timeline.appendChild(fragment);
   });
 }
 
 function renderDetails(selected) {
-  if (!selected) {
+  if (isMobileLayout()) {
     refs.propertyDetails.className = "property-details empty-state";
-    refs.propertyDetails.innerHTML = `
+    refs.propertyDetails.innerHTML = "";
+    return;
+  }
+
+  populatePropertyDetails(refs.propertyDetails, selected);
+}
+
+function populatePropertyDetails(container, selected) {
+  if (!selected) {
+    container.className = "property-details empty-state";
+    container.innerHTML = `
       <h2>Select a property</h2>
       <p>Open a stop from the itinerary to review timing, notes, and checklist items.</p>
     `;
     return;
   }
 
-  refs.propertyDetails.className = "property-details";
+  container.className = "property-details";
   const sourcesMarkup = (selected.sources || [])
     .map((source) => `<span class="source-pill">${escapeHtml(source.label)} - ${escapeHtml(source.name)}</span>`)
     .join("");
@@ -405,7 +466,7 @@ function renderDetails(selected) {
     ? `<ul class="detail-list">${selected.checklist.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>`
     : `<p class="meta-text">No checklist items yet.</p>`;
 
-  refs.propertyDetails.innerHTML = `
+  container.innerHTML = `
     <div class="detail-title-block">
       <p class="eyebrow">${escapeHtml(selected.suburb || "Open Home")}</p>
       <h2>${escapeHtml(selected.address)}</h2>
@@ -476,12 +537,12 @@ function renderDetails(selected) {
     </section>
   `;
 
-  refs.propertyDetails.querySelector("#arrive-button").addEventListener("click", () => toggleArrival(selected.id));
-  refs.propertyDetails.querySelector("#remove-button").addEventListener("click", () => removeProperty(selected.id));
-  refs.propertyDetails.querySelector("#refresh-live-eta").addEventListener("click", () => refreshSelectedEtas(selected));
-  refs.propertyDetails.querySelector("#notes-form").addEventListener("submit", (event) => saveNotes(event, selected.id));
-  refs.propertyDetails.querySelector("#reset-notes-button").addEventListener("click", () => {
-    refs.propertyDetails.querySelector("#property-notes-input").value = selected.notes || "";
+  container.querySelector("#arrive-button").addEventListener("click", () => toggleArrival(selected.id));
+  container.querySelector("#remove-button").addEventListener("click", () => removeProperty(selected.id));
+  container.querySelector("#refresh-live-eta").addEventListener("click", () => refreshSelectedEtas(selected));
+  container.querySelector("#notes-form").addEventListener("submit", (event) => saveNotes(event, selected.id));
+  container.querySelector("#reset-notes-button").addEventListener("click", () => {
+    container.querySelector("#property-notes-input").value = selected.notes || "";
   });
 }
 
