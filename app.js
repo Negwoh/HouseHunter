@@ -294,7 +294,9 @@ function renderSummary(properties) {
 
   if (current) {
     refs.daySummaryTitle.textContent = `${current.address} is your current stop.`;
-    refs.daySummaryCopy.textContent = `You have ${current.timeRemainingLabel.toLowerCase()} before that open home ends${current.nextProperty ? `, and should leave by ${current.leaveByLabel}.` : "."}`;
+    refs.daySummaryCopy.textContent = current.nextProperty
+      ? `You have ${current.timeRemainingLabel.toLowerCase()} before that open home ends, and should leave this stop by ${current.leaveByLabel}.`
+      : `You have ${current.timeRemainingLabel.toLowerCase()} before that open home ends.`;
     return;
   }
 
@@ -375,6 +377,10 @@ function renderTimeline(properties, selectedPropertyId) {
       actions.appendChild(buildMapLink("Open Listing", property.listingUrl));
     }
 
+    if (property.broadbandMapUrl) {
+      actions.appendChild(buildMapLink("Check Fibre", property.broadbandMapUrl));
+    }
+
     item.classList.toggle("has-actions", actions.childElementCount > 0);
     refs.timeline.appendChild(fragment);
   });
@@ -410,6 +416,7 @@ function renderDetails(selected) {
       <button id="arrive-button" class="primary-button" type="button">${selected.status === "current" ? "Mark As Done" : "Check In Now"}</button>
       <button id="remove-button" class="secondary-button" type="button">Remove Stop</button>
       ${selected.listingUrl ? `<a class="secondary-button link-button" href="${selected.listingUrl}" target="_blank" rel="noreferrer">Open Listing</a>` : ""}
+      ${selected.broadbandMapUrl ? `<a class="secondary-button link-button" href="${selected.broadbandMapUrl}" target="_blank" rel="noreferrer">Check Fibre</a>` : ""}
       ${selected.fromPreviousMapUrl ? `<a class="secondary-button link-button" href="${selected.fromPreviousMapUrl}" target="_blank" rel="noreferrer">Route Here</a>` : ""}
       ${selected.toNextMapUrl ? `<a class="secondary-button link-button" href="${selected.toNextMapUrl}" target="_blank" rel="noreferrer">Route To Next</a>` : ""}
     </div>
@@ -423,7 +430,7 @@ function renderDetails(selected) {
         <article><span>Open Window</span><strong>${escapeHtml(selected.openStart)} - ${escapeHtml(selected.openEnd)}</strong></article>
         <article><span>${escapeHtml(selected.travelFromPreviousTitle)}</span><strong>${escapeHtml(selected.travelFromPreviousValue)}</strong></article>
         <article><span>${escapeHtml(selected.distanceFromCurrentTitle)}</span><strong>${escapeHtml(selected.distanceFromCurrentLabel)}</strong></article>
-        <article><span>Leave By</span><strong>${escapeHtml(selected.leaveByLabel)}</strong></article>
+        <article><span>${escapeHtml(selected.leaveByTitle)}</span><strong>${escapeHtml(selected.leaveByLabel)}</strong></article>
       </div>
       <div class="detail-actions">
         <button id="refresh-live-eta" class="ghost-button" type="button">Refresh Google ETA</button>
@@ -755,13 +762,15 @@ function buildAugmentedProperties(properties, currentLocation, routeCache) {
       departureLabel,
       arrivalLabel,
       openWindowLabel,
-      leaveByLabel,
+      leaveByLabel: nextProperty ? leaveByLabel : formatClockTime(property.openEnd),
+      leaveByTitle: nextProperty ? "Leave This Stop By" : "Stay Until",
       timeRemainingLabel: `${timeRemainingMinutes} min left`,
       leaveMessage: buildLeaveMessage(property.status, leaveDeltaMinutes, timeRemainingMinutes, nextProperty),
       leaveWarningClass: leaveDeltaMinutes < 0 ? "danger-text" : leaveDeltaMinutes <= 10 ? "warning-text" : "meta-text",
       currentTravelLabel,
       fromPreviousMapUrl: buildGoogleMapsDirectionsUrl(previousOrigin, property),
       toNextMapUrl: buildGoogleMapsDirectionsUrl(property, nextProperty),
+      broadbandMapUrl: buildBroadbandMapUrl(property),
       liveEtaDetail: currentRoute
         ? `Live Google route estimate: ${currentRoute.durationLabel}, ${currentRoute.distanceLabel}.`
         : state.currentLocation
@@ -882,6 +891,14 @@ function buildGoogleMapsDirectionsUrl(origin, destination) {
   return url.toString();
 }
 
+function buildBroadbandMapUrl(property) {
+  if (!hasCoordinates(property)) {
+    return "";
+  }
+
+  return `https://broadbandmap.nz/availability/${property.lat}/${property.lng}`;
+}
+
 function buildMapsLocationValue(value) {
   if (hasCoordinates(value)) {
     return `${value.lat},${value.lng}`;
@@ -907,7 +924,7 @@ function buildLeaveMessage(status, leaveDeltaMinutes, timeRemainingMinutes, next
     if (leaveDeltaMinutes < 0) {
       return "You should already be heading to the next property to stay on schedule.";
     }
-    return `You can stay about ${leaveDeltaMinutes} more minutes before leaving for the next open home.`;
+    return `You can stay about ${leaveDeltaMinutes} more minutes before leaving this stop for the next open home.`;
   }
 
   if (status === "done") {
@@ -918,7 +935,9 @@ function buildLeaveMessage(status, leaveDeltaMinutes, timeRemainingMinutes, next
     return "The ideal departure time has already passed for this stop.";
   }
 
-  return `Leave in ${leaveDeltaMinutes} minutes to stay on plan.`;
+  return nextProperty
+    ? `Leave this stop in ${leaveDeltaMinutes} minutes to stay on plan.`
+    : "This is the last planned stop, so you can stay until the open home ends.";
 }
 
 function estimateTravelMinutes(distanceKm) {
