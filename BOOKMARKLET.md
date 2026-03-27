@@ -1,6 +1,8 @@
 # House Hunter Bookmarklet
 
 Source bookmarklet script: [bookmarklet.js](./bookmarklet.js)
+Minified source: [bookmarklet.min.js](./bookmarklet.min.js)
+Ready-to-paste bookmarklet URL: [bookmarklet.url.txt](./bookmarklet.url.txt)
 
 ## What it does
 
@@ -21,16 +23,10 @@ If your deploy URL changes, update that value.
 
 ## Creating the bookmarklet
 
-1. Open `bookmarklet.js`
-2. Minify it into one line
-3. Prefix it with `javascript:`
-4. Save it as a browser bookmark
-
-Example wrapper shape:
-
-```text
-javascript:(function(){/* minified code here */})();
-```
+1. Open `bookmarklet.url.txt`
+2. Copy the single `javascript:` line
+3. Create a browser bookmark
+4. Paste that line into the bookmark URL/location field
 
 ## Notes
 
