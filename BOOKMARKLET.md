@@ -6,12 +6,14 @@ Ready-to-paste bookmarklet URL: [bookmarklet.url.txt](./bookmarklet.url.txt)
 
 ## What it does
 
-When run on a public `realestate.co.nz` listing page, the bookmarklet:
+When run on public `realestate.co.nz` pages, the bookmarklet now supports two modes:
 
-- reads public listing data from JSON-LD, meta tags, and visible page text
-- extracts a best-effort property draft
-- opens the deployed House Hunter app with that draft encoded in the URL
-- the app opens the add-property dialog with the fields prefilled for review
+- single listing page:
+  it extracts a best-effort property draft and opens House Hunter with the add-property dialog prefilled
+- list/search/results page:
+  it collects multiple listing URLs from the page and opens House Hunter with a batch import payload
+
+House Hunter then imports that list through the existing listing import endpoint.
 
 ## Configure it
 
@@ -32,4 +34,6 @@ If your deploy URL changes, update that value.
 
 - This bookmarklet only uses public page content.
 - It does not rely on private auth tokens or session APIs.
-- If some fields are missing from the listing page, House Hunter still opens with a partial draft you can edit manually.
+- Single listing pages open a draft for review.
+- List/search pages try to import multiple listings into the route automatically.
+- Batch import depends on the House Hunter listing import endpoint being configured and reachable.

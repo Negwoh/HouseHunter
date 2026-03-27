@@ -125,7 +125,7 @@ if (!state.selectedPropertyId && state.properties[0]) {
 }
 
 bindEvents();
-consumeIncomingPrefill();
+consumeIncomingPayloads();
 renderApp();
 updateLocationStatus("Location not checked yet.");
 updateAppStatus(state.statusMessage);
@@ -538,27 +538,41 @@ function setFormValue(name, value) {
   }
 }
 
-function consumeIncomingPrefill() {
+async function consumeIncomingPayloads() {
   const url = new URL(window.location.href);
   const payload = url.searchParams.get("prefill");
+  const listPayload = url.searchParams.get("prefill_list");
+  let changedUrl = false;
 
-  if (!payload) {
-    return;
+  if (payload) {
+    try {
+      const parsed = JSON.parse(decodeBase64Url(payload));
+      populateFormFromImport(parsed, parsed.listingUrl || "");
+      refs.importUrlInput.value = parsed.listingUrl || "";
+      updateImportStatus("Imported property draft from bookmarklet. Review the fields, then add it to the day.");
+      refs.propertyDialog.showModal();
+      updateAppStatus("Loaded a property draft from the bookmarklet.");
+    } catch {
+      updateAppStatus("Could not read the bookmarklet payload.");
+    }
+    url.searchParams.delete("prefill");
+    changedUrl = true;
   }
 
-  try {
-    const parsed = JSON.parse(decodeBase64Url(payload));
-    populateFormFromImport(parsed, parsed.listingUrl || "");
-    refs.importUrlInput.value = parsed.listingUrl || "";
-    updateImportStatus("Imported property draft from bookmarklet. Review the fields, then add it to the day.");
-    refs.propertyDialog.showModal();
-    updateAppStatus("Loaded a property draft from the bookmarklet.");
-  } catch {
-    updateAppStatus("Could not read the bookmarklet payload.");
+  if (listPayload) {
+    try {
+      const parsed = JSON.parse(decodeBase64Url(listPayload));
+      await importBookmarkletList(parsed.listings || []);
+    } catch {
+      updateAppStatus("Could not read the bookmarklet list payload.");
+    }
+    url.searchParams.delete("prefill_list");
+    changedUrl = true;
   }
 
-  url.searchParams.delete("prefill");
-  window.history.replaceState({}, document.title, url.toString());
+  if (changedUrl) {
+    window.history.replaceState({}, document.title, url.toString());
+  }
 }
 
 function loadProperties() {
@@ -810,4 +824,101 @@ function decodeBase64Url(value) {
   const binary = atob(padded);
   const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
   return new TextDecoder().decode(bytes);
+}
+
+async function importBookmarkletList(listings) {
+  if (!Array.isArray(listings) || !listings.length) {
+    updateAppStatus("No listings were found in the bookmarklet payload.");
+    return;
+  }
+
+  if (!IMPORT_ENDPOINT) {
+    updateAppStatus("Batch import needs the listing import endpoint to be configured.");
+    return;
+  }
+
+  const existingUrls = new Set(
+    state.properties.map((property) => property.listingUrl).filter(Boolean)
+  );
+  const uniqueListings = listings.filter((item) => item && item.listingUrl && !existingUrls.has(item.listingUrl));
+
+  if (!uniqueListings.length) {
+    updateAppStatus("All bookmarklet listings are already in the route.");
+    return;
+  }
+
+  updateAppStatus(`Importing ${uniqueListings.length} listings from the bookmarklet...`);
+
+  const importedProperties = [];
+  for (const item of uniqueListings) {
+    try {
+      const imported = await importListingData(item.listingUrl);
+      importedProperties.push(buildPropertyFromImport(imported, item.listingUrl, item.title || ""));
+    } catch {
+      importedProperties.push(buildFallbackImportedProperty(item.listingUrl, item.title || "Imported listing"));
+    }
+  }
+
+  state.properties.push(...importedProperties);
+  state.properties = getSortedProperties(state.properties);
+  state.selectedPropertyId = importedProperties[0]?.id ?? state.selectedPropertyId;
+  persistProperties(state.properties);
+  updateAppStatus(`Imported ${importedProperties.length} listings from the bookmarklet.`);
+  renderApp();
+}
+
+async function importListingData(listingUrl) {
+  const response = await fetch(`${IMPORT_ENDPOINT}?url=${encodeURIComponent(listingUrl)}`);
+  const payload = await response.json();
+  if (!response.ok) {
+    throw new Error(payload.error || "Import failed.");
+  }
+  return payload.property;
+}
+
+function buildPropertyFromImport(property, listingUrl, fallbackTitle = "") {
+  return {
+    id: crypto.randomUUID(),
+    address: String(property.address || fallbackTitle || "Imported listing").trim(),
+    suburb: String(property.suburb || "").trim(),
+    openStart: String(property.openStart || ""),
+    openEnd: String(property.openEnd || ""),
+    beds: Number(property.beds) || 0,
+    baths: Number(property.baths) || 0,
+    parking: Number(property.parking) || 0,
+    lat: property.lat === "" || property.lat == null ? "" : Number(property.lat),
+    lng: property.lng === "" || property.lng == null ? "" : Number(property.lng),
+    priceEstimate: String(property.priceEstimate || "Imported listing").trim(),
+    listingUrl,
+    notes: String(property.notes || "").trim(),
+    checklist: Array.isArray(property.checklist) ? property.checklist : [],
+    sources: buildSources(listingUrl),
+    status: "upcoming",
+    checkInTime: null
+  };
+}
+
+function buildFallbackImportedProperty(listingUrl, fallbackTitle) {
+  return {
+    id: crypto.randomUUID(),
+    address: fallbackTitle || "Imported listing",
+    suburb: "",
+    openStart: "",
+    openEnd: "",
+    beds: 0,
+    baths: 0,
+    parking: 0,
+    lat: "",
+    lng: "",
+    priceEstimate: "Imported listing",
+    listingUrl,
+    notes: "",
+    checklist: [
+      "Review listing details manually",
+      "Confirm open home time"
+    ],
+    sources: buildSources(listingUrl),
+    status: "upcoming",
+    checkInTime: null
+  };
 }

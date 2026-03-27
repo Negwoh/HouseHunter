@@ -93,10 +93,59 @@
     return btoa(binary).replaceAll("+", "-").replaceAll("/", "_").replaceAll(/=+$/g, "");
   }
 
+  function getListingLinks() {
+    const seen = new Set();
+    return Array.from(document.querySelectorAll("a[href]"))
+      .map((anchor) => {
+        try {
+          const url = new URL(anchor.href, window.location.href);
+          if (!/realestate\.co\.nz$/i.test(url.hostname) || !/\/\d{6,}/.test(url.pathname)) {
+            return null;
+          }
+          const cleanUrl = `${url.origin}${url.pathname}`;
+          if (seen.has(cleanUrl)) {
+            return null;
+          }
+          seen.add(cleanUrl);
+          const title = (anchor.textContent || anchor.getAttribute("aria-label") || "").replace(/\s+/g, " ").trim();
+          return {
+            listingUrl: cleanUrl,
+            title
+          };
+        } catch {
+          return null;
+        }
+      })
+      .filter(Boolean);
+  }
+
+  function openHouseHunter(params) {
+    const search = new URLSearchParams(params);
+    window.open(`${APP_URL}?${search.toString()}`, "_blank", "noopener,noreferrer");
+  }
+
   const jsonLd = getJsonLd();
   const text = textContent();
   const title = document.title || meta("og:title") || "";
   const description = meta("description") || meta("og:description") || "";
+  const currentUrl = new URL(window.location.href);
+  const likelySingleListing = Boolean(
+    (jsonLd && jsonLd.address) ||
+    /\/\d{6,}/.test(currentUrl.pathname) ||
+    /Open homes?/i.test(text) ||
+    /(\d+)\s+bed/i.test(text)
+  );
+
+  if (!likelySingleListing) {
+    const listings = getListingLinks();
+    if (listings.length) {
+      openHouseHunter({
+        prefill_list: encodeBase64Url(JSON.stringify({ listings }))
+      });
+      return;
+    }
+  }
+
   const address = pickAddress(jsonLd, title);
   const suburb = address.split(",").map((part) => part.trim()).filter(Boolean)[1] || "";
   const windowData = openHomeWindow(text);
@@ -127,6 +176,7 @@
     ]
   };
 
-  const payload = encodeBase64Url(JSON.stringify(property));
-  window.open(`${APP_URL}?prefill=${payload}`, "_blank", "noopener,noreferrer");
+  openHouseHunter({
+    prefill: encodeBase64Url(JSON.stringify(property))
+  });
 })();
