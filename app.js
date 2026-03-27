@@ -125,6 +125,7 @@ if (!state.selectedPropertyId && state.properties[0]) {
 }
 
 bindEvents();
+consumeIncomingPrefill();
 renderApp();
 updateLocationStatus("Location not checked yet.");
 updateAppStatus(state.statusMessage);
@@ -537,6 +538,29 @@ function setFormValue(name, value) {
   }
 }
 
+function consumeIncomingPrefill() {
+  const url = new URL(window.location.href);
+  const payload = url.searchParams.get("prefill");
+
+  if (!payload) {
+    return;
+  }
+
+  try {
+    const parsed = JSON.parse(decodeBase64Url(payload));
+    populateFormFromImport(parsed, parsed.listingUrl || "");
+    refs.importUrlInput.value = parsed.listingUrl || "";
+    updateImportStatus("Imported property draft from bookmarklet. Review the fields, then add it to the day.");
+    refs.propertyDialog.showModal();
+    updateAppStatus("Loaded a property draft from the bookmarklet.");
+  } catch {
+    updateAppStatus("Could not read the bookmarklet payload.");
+  }
+
+  url.searchParams.delete("prefill");
+  window.history.replaceState({}, document.title, url.toString());
+}
+
 function loadProperties() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -778,4 +802,12 @@ function registerServiceWorker() {
   if ("serviceWorker" in navigator && isSupportedProtocol) {
     navigator.serviceWorker.register("./sw.js").catch(() => {});
   }
+}
+
+function decodeBase64Url(value) {
+  const normalized = value.replaceAll("-", "+").replaceAll("_", "/");
+  const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, "=");
+  const binary = atob(padded);
+  const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
+  return new TextDecoder().decode(bytes);
 }
