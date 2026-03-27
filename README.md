@@ -6,12 +6,12 @@ Current capabilities:
 
 - add properties through a modal app flow
 - import a `realestate.co.nz` listing URL through a serverless worker
-- use Google Maps traffic-aware drive time estimates when the worker is configured
+- use on-demand Google Maps traffic-aware drive time estimates when the worker is configured
 - search and save a starting location address for route planning
 - export and import saved plans as JSON files for transfer between devices
 - track the day as a timed driving itinerary
 - click into each stop for timing, checklist, notes, and source links
-- refresh device location for live distance-to-next estimates
+- refresh device location for live distance-to-next estimates, then request Google ETA when needed
 - open Google Maps directions from the previous stop to the current property, and on to the next stop
 - check into a property and see how long you can stay before leaving
 - save likes, dislikes, and follow-up notes per property
@@ -133,6 +133,7 @@ If page coordinates are missing, the worker will also try to geocode the listing
 ## Google Maps travel-time setup
 
 The worker can also call Google Routes API for better driving ETAs.
+The frontend now requests those ETAs on demand instead of prefetching every stop automatically.
 
 ### 1. Create a Google Maps Platform key
 

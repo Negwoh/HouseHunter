@@ -273,7 +273,6 @@ function renderApp() {
   renderSummary(properties);
   renderTimeline(properties, selected?.id ?? null);
   renderDetails(selected);
-  prefetchBetterEtas(properties);
 }
 
 function renderSummary(properties) {
@@ -417,6 +416,9 @@ function renderDetails(selected) {
         <article><span>${escapeHtml(selected.distanceFromCurrentTitle)}</span><strong>${escapeHtml(selected.distanceFromCurrentLabel)}</strong></article>
         <article><span>Leave By</span><strong>${escapeHtml(selected.leaveByLabel)}</strong></article>
       </div>
+      <div class="detail-actions">
+        <button id="refresh-live-eta" class="ghost-button" type="button">Refresh Google ETA</button>
+      </div>
       <p class="${selected.leaveWarningClass}">${escapeHtml(selected.leaveMessage)}</p>
       <p class="meta-text">${escapeHtml(selected.liveEtaDetail)}</p>
     </section>
@@ -460,6 +462,7 @@ function renderDetails(selected) {
 
   refs.propertyDetails.querySelector("#arrive-button").addEventListener("click", () => toggleArrival(selected.id));
   refs.propertyDetails.querySelector("#remove-button").addEventListener("click", () => removeProperty(selected.id));
+  refs.propertyDetails.querySelector("#refresh-live-eta").addEventListener("click", () => refreshSelectedEtas(selected));
   refs.propertyDetails.querySelector("#notes-form").addEventListener("submit", (event) => saveNotes(event, selected.id));
   refs.propertyDetails.querySelector("#reset-notes-button").addEventListener("click", () => {
     refs.propertyDetails.querySelector("#property-notes-input").value = selected.notes || "";
@@ -725,6 +728,7 @@ function buildAugmentedProperties(properties, currentLocation, routeCache) {
       ...property,
       previousProperty,
       nextProperty,
+      currentOrigin,
       travelFromPreviousMinutes: computedTravelFromPreviousMinutes,
       travelFromPreviousLabel: previousOrigin
         ? travelFromPreviousMinutes == null
@@ -760,24 +764,36 @@ function buildAugmentedProperties(properties, currentLocation, routeCache) {
   });
 }
 
-function prefetchBetterEtas(properties) {
+async function refreshSelectedEtas(property) {
   if (!ETA_ENDPOINT) {
+    updateAppStatus("Google ETA is not configured for this app.");
     return;
   }
 
-  const currentIndex = properties.findIndex((property) => property.status === "current");
+  const requests = [];
 
-  properties.forEach((property, index) => {
-    const previousProperty = properties[index - 1];
-    if (hasCoordinates(previousProperty) && hasCoordinates(property)) {
-      fetchBetterEta(previousProperty, property);
-    }
+  if (hasCoordinates(property.previousProperty) && hasCoordinates(property)) {
+    requests.push(fetchBetterEta(property.previousProperty, property));
+  } else if (!property.previousProperty && hasCoordinates(state.homeLocation) && hasCoordinates(property)) {
+    requests.push(fetchBetterEta(state.homeLocation, property));
+  }
 
-    const currentOrigin = currentIndex === -1 || index <= currentIndex ? (state.currentLocation || state.homeLocation) : properties[currentIndex];
-    if (hasCoordinates(currentOrigin) && hasCoordinates(property)) {
-      fetchBetterEta(currentOrigin, property);
-    }
-  });
+  if (hasCoordinates(property.currentOrigin) && hasCoordinates(property)) {
+    requests.push(fetchBetterEta(property.currentOrigin, property));
+  }
+
+  if (hasCoordinates(property) && hasCoordinates(property.nextProperty)) {
+    requests.push(fetchBetterEta(property, property.nextProperty));
+  }
+
+  if (!requests.length) {
+    updateAppStatus("This stop needs coordinates before Google ETA can be refreshed.");
+    return;
+  }
+
+  updateAppStatus("Refreshing Google ETA for this stop...");
+  await Promise.allSettled(requests);
+  renderApp();
 }
 
 async function fetchBetterEta(origin, destination) {
