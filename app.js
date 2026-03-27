@@ -340,7 +340,7 @@ function renderSummary(properties) {
   refs.completedHomes.textContent = String(completed);
 
   if (current) {
-    refs.daySummaryTitle.textContent = `${current.address} is your current stop.`;
+    refs.daySummaryTitle.textContent = `${current.displayAddress || current.address} is your current stop.`;
     refs.daySummaryCopy.textContent = current.nextProperty
       ? `You have ${current.timeRemainingLabel.toLowerCase()} before that open home ends, and should leave this stop by ${current.leaveByLabel}.`
       : `You have ${current.timeRemainingLabel.toLowerCase()} before that open home ends.`;
@@ -348,7 +348,7 @@ function renderSummary(properties) {
   }
 
   if (next) {
-    refs.daySummaryTitle.textContent = `${next.address} is next on the route.`;
+    refs.daySummaryTitle.textContent = `${next.displayAddress || next.address} is next on the route.`;
     refs.daySummaryCopy.textContent = `Leave by ${next.departureLabel} to reach the next open home around ${next.arrivalLabel}.`;
     return;
   }
@@ -393,10 +393,10 @@ function renderTimeline(properties, selectedPropertyId) {
       renderApp();
     });
 
-    title.textContent = property.address;
+    title.textContent = property.displayAddress || property.address;
     timelineTime.textContent = property.openStart;
     timelineWindow.textContent = `${property.openStart} - ${property.openEnd}`;
-    suburb.textContent = property.suburb || "Suburb not set";
+    suburb.textContent = property.displaySuburb || property.suburb || "Suburb not set";
     statusChip.textContent = property.status;
     statusChip.className = `chip timeline-status-chip ${property.status}`;
 
@@ -472,8 +472,8 @@ function populatePropertyDetails(container, selected) {
 
   container.innerHTML = `
     <div class="detail-title-block">
-      <p class="eyebrow">${escapeHtml(selected.suburb || "Open Home")}</p>
-      <h2>${escapeHtml(selected.address)}</h2>
+      <p class="eyebrow">${escapeHtml(selected.displaySuburb || selected.suburb || "Open Home")}</p>
+      <h2>${escapeHtml(selected.displayAddress || selected.address)}</h2>
       <p>${escapeHtml(selected.priceEstimate)}</p>
     </div>
 
@@ -760,6 +760,7 @@ function buildAugmentedProperties(properties, currentLocation, routeCache) {
   const currentIndex = sorted.findIndex((property) => property.status === "current");
 
   return sorted.map((property, index) => {
+    const displayLocation = buildDisplayLocation(property.address, property.suburb);
     const previousProperty = sorted[index - 1];
     const nextProperty = sorted[index + 1];
     const previousOrigin = previousProperty || (index === 0 ? state.homeLocation : null);
@@ -808,6 +809,8 @@ function buildAugmentedProperties(properties, currentLocation, routeCache) {
 
     return {
       ...property,
+      displayAddress: displayLocation.address,
+      displaySuburb: displayLocation.suburb,
       previousProperty,
       nextProperty,
       currentOrigin,
@@ -1091,6 +1094,42 @@ function buildLeaveMessage(status, leaveDeltaMinutes, timeRemainingMinutes, next
   return nextProperty
     ? `Leave this stop in ${leaveDeltaMinutes} minutes to stay on plan.`
     : "This is the last planned stop, so you can stay until the open home ends.";
+}
+
+function buildDisplayLocation(address, suburb) {
+  const parts = String(address || "")
+    .split(",")
+    .map((part) => part.trim())
+    .filter(Boolean);
+
+  const uniqueParts = [];
+  const seen = new Set();
+  for (const part of parts) {
+    const key = part.toLowerCase();
+    if (!seen.has(key)) {
+      seen.add(key);
+      uniqueParts.push(part);
+    }
+  }
+
+  const normalizedSuburb = String(suburb || "").trim();
+  const street = uniqueParts[0] || String(address || "").trim();
+
+  let displaySuburb = normalizedSuburb;
+  if (!displaySuburb) {
+    displaySuburb = uniqueParts[1] || "";
+  }
+
+  if (displaySuburb) {
+    const suburbKey = displaySuburb.toLowerCase();
+    const matchingPart = uniqueParts.find((part, index) => index > 0 && part.toLowerCase() === suburbKey);
+    displaySuburb = matchingPart || displaySuburb;
+  }
+
+  return {
+    address: street,
+    suburb: displaySuburb
+  };
 }
 
 function estimateTravelMinutes(distanceKm) {
