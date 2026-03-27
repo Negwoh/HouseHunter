@@ -37,9 +37,95 @@
       .trim();
   }
 
-  function extractNumber(text, regex) {
-    const match = text.match(regex);
-    return match ? Number(match[1]) : 0;
+  function firstMatchingNumber(text, patterns) {
+    for (const pattern of patterns) {
+      const match = text.match(pattern);
+      if (match) {
+        return Number(match[1]) || 0;
+      }
+    }
+    return 0;
+  }
+
+  function firstMatchingText(text, patterns) {
+    for (const pattern of patterns) {
+      const match = text.match(pattern);
+      if (match) {
+        return `${match[1]} ${normalizeAreaUnit(match[2])}`;
+      }
+    }
+    return "";
+  }
+
+  function normalizeAreaUnit(value) {
+    const unit = String(value || "").toLowerCase();
+    if (unit === "sqm" || unit === "m2" || unit === "m\u00b2") {
+      return "m2";
+    }
+    return unit;
+  }
+
+  function extractPropertyFacts(text) {
+    return {
+      beds: firstMatchingNumber(text, [
+        /\b(\d+)\s*(?:bed|bedroom|bedrooms)\b/i,
+        /\bbedrooms?\s*:?\s*(\d+)\b/i
+      ]),
+      baths: firstMatchingNumber(text, [
+        /\b(\d+)\s*(?:bath|bathroom|bathrooms)\b/i,
+        /\bbath(?:room)?s?\s*:?\s*(\d+)\b/i
+      ]),
+      parking: firstMatchingNumber(text, [
+        /\b(\d+)\s*(?:car\s*park|carparks?|garage|garages|parking|parks?)\b/i,
+        /\b(?:car\s*park|carparks?|garage|garages|parking|parks?)\s*:?\s*(\d+)\b/i
+      ]),
+      sectionSize: firstMatchingText(text, [
+        /\bsection\s*(?:size|area)?\s*:?\s*(\d+(?:\.\d+)?)\s*(m2|m\u00b2|sqm|ha)\b/i,
+        /\bland\s*(?:area|size)?\s*:?\s*(\d+(?:\.\d+)?)\s*(m2|m\u00b2|sqm|ha)\b/i,
+        /\bsite\s*(?:area|size)?\s*:?\s*(\d+(?:\.\d+)?)\s*(m2|m\u00b2|sqm|ha)\b/i,
+        /\b(\d+(?:\.\d+)?)\s*(m2|m\u00b2|sqm|ha)\s*(?:section|land|site)\b/i
+      ])
+    };
+  }
+
+  function firstCoordinate(values) {
+    for (const value of values) {
+      const numeric = Number(value);
+      if (Number.isFinite(numeric)) {
+        return numeric;
+      }
+    }
+    return null;
+  }
+
+  function extractCoordinate(regex, html) {
+    const match = html.match(regex);
+    return match && match.groups ? Number(match.groups.value) : null;
+  }
+
+  function extractCoordinates(jsonLd, html) {
+    const lat = firstCoordinate([
+      jsonLd && jsonLd.geo && jsonLd.geo.latitude,
+      jsonLd && jsonLd.geo && jsonLd.geo.lat,
+      extractCoordinate(/"latitude"\s*:\s*"?(?<value>-?\d+\.\d+)/i, html),
+      extractCoordinate(/["']latitude["']\s*[=:]\s*"?(?<value>-?\d+\.\d+)/i, html),
+      extractCoordinate(/["']lat["']\s*[=:]\s*"?(?<value>-?\d+\.\d+)/i, html),
+      extractCoordinate(/\blat(?:itude)?\b["']?\s*:\s*"?(?<value>-?\d+\.\d+)/i, html)
+    ]);
+
+    const lng = firstCoordinate([
+      jsonLd && jsonLd.geo && (jsonLd.geo.longitude || jsonLd.geo.lng),
+      extractCoordinate(/"longitude"\s*:\s*"?(?<value>-?\d+\.\d+)/i, html),
+      extractCoordinate(/["']longitude["']\s*[=:]\s*"?(?<value>-?\d+\.\d+)/i, html),
+      extractCoordinate(/["']lng["']\s*[=:]\s*"?(?<value>-?\d+\.\d+)/i, html),
+      extractCoordinate(/\blng\b["']?\s*:\s*"?(?<value>-?\d+\.\d+)/i, html),
+      extractCoordinate(/\blon(?:gitude)?\b["']?\s*:\s*"?(?<value>-?\d+\.\d+)/i, html)
+    ]);
+
+    return {
+      lat: Number.isFinite(lat) ? lat : "",
+      lng: Number.isFinite(lng) ? lng : ""
+    };
   }
 
   function normalizeTime(value) {
@@ -128,6 +214,9 @@
   const text = textContent();
   const title = document.title || meta("og:title") || "";
   const description = meta("description") || meta("og:description") || "";
+  const html = document.documentElement ? document.documentElement.innerHTML : "";
+  const facts = extractPropertyFacts(text);
+  const coordinates = extractCoordinates(jsonLd, html);
   const currentUrl = new URL(window.location.href);
   const likelySingleListing = Boolean(
     (jsonLd && jsonLd.address) ||
@@ -149,23 +238,18 @@
   const address = pickAddress(jsonLd, title);
   const suburb = address.split(",").map((part) => part.trim()).filter(Boolean)[1] || "";
   const windowData = openHomeWindow(text);
-  const lat = Number(
-    (document.documentElement.innerHTML.match(/"latitude"\s*:\s*"?(?<value>-?\d+\.\d+)/i) || {}).groups?.value || ""
-  );
-  const lng = Number(
-    (document.documentElement.innerHTML.match(/"longitude"\s*:\s*"?(?<value>-?\d+\.\d+)/i) || {}).groups?.value || ""
-  );
 
   const property = {
     address,
     suburb,
     openStart: windowData.openStart,
     openEnd: windowData.openEnd,
-    beds: extractNumber(text, /(\d+)\s+bed/i),
-    baths: extractNumber(text, /(\d+)\s+bath/i),
-    parking: extractNumber(text, /(\d+)\s+(car|park|garage)/i),
-    lat: Number.isFinite(lat) ? lat : "",
-    lng: Number.isFinite(lng) ? lng : "",
+    beds: facts.beds,
+    baths: facts.baths,
+    parking: facts.parking,
+    sectionSize: facts.sectionSize,
+    lat: coordinates.lat,
+    lng: coordinates.lng,
     priceEstimate: (text.match(/(\$\s?[\d,.]+(?:\s?-\s?\$\s?[\d,.]+)?(?:\s?[mMkK])?)/) || [])[1] || "",
     listingUrl: window.location.href,
     notes: description,

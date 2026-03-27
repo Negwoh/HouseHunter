@@ -115,6 +115,8 @@ function parseListing(html, listingUrl) {
 
   const text = stripTags(html);
   const openWindow = extractOpenHomeWindow(text);
+  const facts = extractPropertyFactsV2(text);
+  const coordinates = extractCoordinatesV2(html, jsonLd);
   const priceEstimate = firstNonEmpty(
     extractPrice(text),
     extractMeta(html, "og:description"),
@@ -126,9 +128,10 @@ function parseListing(html, listingUrl) {
     suburb: extractSuburb(address),
     openStart: openWindow.openStart,
     openEnd: openWindow.openEnd,
-    beds: extractNumber(text, /(\d+)\s+bed/i),
-    baths: extractNumber(text, /(\d+)\s+bath/i),
-    parking: extractNumber(text, /(\d+)\s+(car|park|garage)/i),
+    beds: facts.beds,
+    baths: facts.baths,
+    parking: facts.parking,
+    sectionSize: facts.sectionSize,
     priceEstimate: priceEstimate || "Imported listing",
     notes: description,
     checklist: [
@@ -136,8 +139,8 @@ function parseListing(html, listingUrl) {
       "Check listing details against the property in person",
       "Review downloaded documents"
     ],
-    lat: extractCoordinate(html, /"latitude"\s*:\s*"?(?<value>-?\d+\.\d+)/i),
-    lng: extractCoordinate(html, /"longitude"\s*:\s*"?(?<value>-?\d+\.\d+)/i),
+    lat: coordinates.lat,
+    lng: coordinates.lng,
     sourceUrl: listingUrl
   };
 }
@@ -196,9 +199,169 @@ function extractNumber(text, regex) {
   return match ? Number(match[1]) : 0;
 }
 
-function extractCoordinate(html, regex) {
+function extractPropertyFactsV2(text) {
+  return {
+    beds: firstMatchingNumberV2(text, [
+      /\b(\d+)\s*(?:bed|bedroom|bedrooms)\b/i,
+      /\bbedrooms?\s*:?\s*(\d+)\b/i
+    ]),
+    baths: firstMatchingNumberV2(text, [
+      /\b(\d+)\s*(?:bath|bathroom|bathrooms)\b/i,
+      /\bbath(?:room)?s?\s*:?\s*(\d+)\b/i
+    ]),
+    parking: firstMatchingNumberV2(text, [
+      /\b(\d+)\s*(?:car\s*park|carparks?|garage|garages|parking|parks?)\b/i,
+      /\b(?:car\s*park|carparks?|garage|garages|parking|parks?)\s*:?\s*(\d+)\b/i
+    ]),
+    sectionSize: firstMatchingTextV2(text, [
+      /\bsection\s*(?:size|area)?\s*:?\s*(\d+(?:\.\d+)?)\s*(m2|m\u00b2|sqm|ha)\b/i,
+      /\bland\s*(?:area|size)?\s*:?\s*(\d+(?:\.\d+)?)\s*(m2|m\u00b2|sqm|ha)\b/i,
+      /\bsite\s*(?:area|size)?\s*:?\s*(\d+(?:\.\d+)?)\s*(m2|m\u00b2|sqm|ha)\b/i,
+      /\b(\d+(?:\.\d+)?)\s*(m2|m\u00b2|sqm|ha)\s*(?:section|land|site)\b/i
+    ])
+  };
+}
+
+function firstMatchingNumberV2(text, patterns) {
+  for (const pattern of patterns) {
+    const match = text.match(pattern);
+    if (match) {
+      return Number(match[1]) || 0;
+    }
+  }
+  return 0;
+}
+
+function firstMatchingTextV2(text, patterns) {
+  for (const pattern of patterns) {
+    const match = text.match(pattern);
+    if (match) {
+      return `${match[1]} ${normalizeAreaUnitV2(match[2])}`;
+    }
+  }
+  return "";
+}
+
+function normalizeAreaUnitV2(value) {
+  const unit = String(value || "").toLowerCase();
+  if (unit === "sqm" || unit === "m2" || unit === "m\u00b2") {
+    return "m2";
+  }
+  return unit;
+}
+
+function extractCoordinatesV2(html, jsonLd) {
+  const lat = firstCoordinateV2([
+    jsonLd && jsonLd.geo && jsonLd.geo.latitude,
+    jsonLd && jsonLd.geo && jsonLd.geo.lat,
+    extractCoordinateFromPatternV2(html, /"latitude"\s*:\s*"?(?<value>-?\d+\.\d+)/i),
+    extractCoordinateFromPatternV2(html, /["']latitude["']\s*[=:]\s*"?(?<value>-?\d+\.\d+)/i),
+    extractCoordinateFromPatternV2(html, /["']lat["']\s*[=:]\s*"?(?<value>-?\d+\.\d+)/i),
+    extractCoordinateFromPatternV2(html, /\blat(?:itude)?\b["']?\s*:\s*"?(?<value>-?\d+\.\d+)/i)
+  ]);
+
+  const lng = firstCoordinateV2([
+    jsonLd && jsonLd.geo && (jsonLd.geo.longitude || jsonLd.geo.lng),
+    extractCoordinateFromPatternV2(html, /"longitude"\s*:\s*"?(?<value>-?\d+\.\d+)/i),
+    extractCoordinateFromPatternV2(html, /["']longitude["']\s*[=:]\s*"?(?<value>-?\d+\.\d+)/i),
+    extractCoordinateFromPatternV2(html, /["']lng["']\s*[=:]\s*"?(?<value>-?\d+\.\d+)/i),
+    extractCoordinateFromPatternV2(html, /\blng\b["']?\s*:\s*"?(?<value>-?\d+\.\d+)/i),
+    extractCoordinateFromPatternV2(html, /\blon(?:gitude)?\b["']?\s*:\s*"?(?<value>-?\d+\.\d+)/i)
+  ]);
+
+  return {
+    lat: Number.isFinite(lat) ? lat : "",
+    lng: Number.isFinite(lng) ? lng : ""
+  };
+}
+
+function extractCoordinateFromPatternV2(html, regex) {
   const match = html.match(regex);
-  return match ? Number(match.groups.value) : "";
+  return match && match.groups ? Number(match.groups.value) : null;
+}
+
+function firstCoordinateV2(values) {
+  for (const value of values) {
+    const numeric = Number(value);
+    if (Number.isFinite(numeric)) {
+      return numeric;
+    }
+  }
+  return null;
+}
+
+function extractPropertyFacts(text) {
+  return {
+    beds: firstMatchingNumber(text, [
+      /\b(\d+)\s*(?:bed|bedroom|bedrooms)\b/i
+    ]),
+    baths: firstMatchingNumber(text, [
+      /\b(\d+)\s*(?:bath|bathroom|bathrooms)\b/i
+    ]),
+    parking: firstMatchingNumber(text, [
+      /\b(\d+)\s*(?:car\s*park|carpark|garage|garages|parking|parks)\b/i
+    ]),
+    sectionSize: firstMatchingText(text, [
+      /\bsection\s*(?:size|area)?\s*(\d+(?:\.\d+)?)\s*(m2|m\u00b2|sqm|ha)\b/i,
+      /\bland\s*(?:area|size)?\s*(\d+(?:\.\d+)?)\s*(m2|m\u00b2|sqm|ha)\b/i,
+      /\b(\d+(?:\.\d+)?)\s*(m2|m\u00b2|sqm|ha)\s*(?:section|land)\b/i
+    ])
+  };
+}
+
+function firstMatchingNumber(text, patterns) {
+  for (const pattern of patterns) {
+    const match = text.match(pattern);
+    if (match) {
+      return Number(match[1]) || 0;
+    }
+  }
+  return 0;
+}
+
+function firstMatchingText(text, patterns) {
+  for (const pattern of patterns) {
+    const match = text.match(pattern);
+    if (match) {
+      return `${match[1]} ${match[2].replace("sqm", "m2")}`.replace("m\u00b2", "m2");
+    }
+  }
+  return "";
+}
+
+function extractCoordinates(html, jsonLd) {
+  const lat = firstCoordinate([
+    jsonLd && jsonLd.geo && jsonLd.geo.latitude,
+    extractCoordinateFromPattern(html, /"latitude"\s*:\s*"?(?<value>-?\d+\.\d+)/i),
+    extractCoordinateFromPattern(html, /\blat(?:itude)?\b["']?\s*:\s*"?(?<value>-?\d+\.\d+)/i)
+  ]);
+
+  const lng = firstCoordinate([
+    jsonLd && jsonLd.geo && (jsonLd.geo.longitude || jsonLd.geo.lng),
+    extractCoordinateFromPattern(html, /"longitude"\s*:\s*"?(?<value>-?\d+\.\d+)/i),
+    extractCoordinateFromPattern(html, /\blng\b["']?\s*:\s*"?(?<value>-?\d+\.\d+)/i),
+    extractCoordinateFromPattern(html, /\blon(?:gitude)?\b["']?\s*:\s*"?(?<value>-?\d+\.\d+)/i)
+  ]);
+
+  return {
+    lat: Number.isFinite(lat) ? lat : "",
+    lng: Number.isFinite(lng) ? lng : ""
+  };
+}
+
+function extractCoordinateFromPattern(html, regex) {
+  const match = html.match(regex);
+  return match && match.groups ? Number(match.groups.value) : null;
+}
+
+function firstCoordinate(values) {
+  for (const value of values) {
+    const numeric = Number(value);
+    if (Number.isFinite(numeric)) {
+      return numeric;
+    }
+  }
+  return null;
 }
 
 function formatAddress(address) {

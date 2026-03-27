@@ -106,6 +106,7 @@ function handleAddProperty(event) {
     beds: Number(formData.get("beds")) || 0,
     baths: Number(formData.get("baths")) || 0,
     parking: Number(formData.get("parking")) || 0,
+    sectionSize: String(formData.get("sectionSize")).trim(),
     lat: Number(formData.get("lat")),
     lng: Number(formData.get("lng")),
     priceEstimate: String(formData.get("priceEstimate")).trim() || "Estimate not added",
@@ -351,6 +352,7 @@ function renderDetails(selected) {
         <article><span>Bedrooms</span><strong>${selected.beds}</strong></article>
         <article><span>Bathrooms</span><strong>${selected.baths}</strong></article>
         <article><span>Parking</span><strong>${selected.parking}</strong></article>
+        <article><span>Section Size</span><strong>${escapeHtml(selected.sectionSize || "-")}</strong></article>
         <article><span>Travel Mode</span><strong>Driving</strong></article>
       </div>
     </section>
@@ -456,6 +458,7 @@ function populateFormFromImport(property, listingUrl) {
   setFormValue("beds", property.beds ?? "");
   setFormValue("baths", property.baths ?? "");
   setFormValue("parking", property.parking ?? "");
+  setFormValue("sectionSize", property.sectionSize || "");
   setFormValue("priceEstimate", property.priceEstimate || "");
   setFormValue("listingUrl", listingUrl);
   setFormValue("notes", property.notes || "");
@@ -883,6 +886,7 @@ function normalizeImportedProperty(property) {
     beds: Number(property.beds) || 0,
     baths: Number(property.baths) || 0,
     parking: Number(property.parking) || 0,
+    sectionSize: String(property.sectionSize || "").trim(),
     lat: property.lat === "" || property.lat == null ? "" : Number(property.lat),
     lng: property.lng === "" || property.lng == null ? "" : Number(property.lng),
     priceEstimate: String(property.priceEstimate || "").trim(),
@@ -955,6 +959,7 @@ function buildPropertyFromImport(property, listingUrl, fallbackTitle = "") {
     beds: Number(property.beds) || 0,
     baths: Number(property.baths) || 0,
     parking: Number(property.parking) || 0,
+    sectionSize: String(property.sectionSize || "").trim(),
     lat: property.lat === "" || property.lat == null ? "" : Number(property.lat),
     lng: property.lng === "" || property.lng == null ? "" : Number(property.lng),
     priceEstimate: String(property.priceEstimate || "Imported listing").trim(),
@@ -977,6 +982,7 @@ function buildFallbackImportedProperty(listingUrl, fallbackTitle) {
     beds: 0,
     baths: 0,
     parking: 0,
+    sectionSize: "",
     lat: "",
     lng: "",
     priceEstimate: "Imported listing",

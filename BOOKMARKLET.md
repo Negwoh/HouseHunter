@@ -34,6 +34,6 @@ If your deploy URL changes, update that value.
 
 - This bookmarklet only uses public page content.
 - It does not rely on private auth tokens or session APIs.
-- Single listing pages open a draft for review.
+- Single listing pages open a draft for review, including best-effort extraction for beds, baths, parking, section size, and coordinates.
 - List/search pages try to import multiple listings into the route automatically.
 - Batch import depends on the House Hunter listing import endpoint being configured and reachable.
