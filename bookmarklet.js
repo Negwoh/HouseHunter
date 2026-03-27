@@ -252,6 +252,49 @@
     window.open(`${APP_URL}?${search.toString()}`, "_blank", "noopener,noreferrer");
   }
 
+  function openListInHouseHunter(listings) {
+    if (!listings.length) {
+      return false;
+    }
+
+    openHouseHunter({
+      prefill_list: encodeBase64Url(JSON.stringify({ listings }))
+    });
+    return true;
+  }
+
+  function updateStatus(message) {
+    let notice = document.getElementById("house-hunter-bookmarklet-status");
+    if (!notice) {
+      notice = document.createElement("div");
+      notice.id = "house-hunter-bookmarklet-status";
+      notice.style.cssText = "position:fixed;right:16px;bottom:16px;z-index:2147483647;background:#111;color:#fff;padding:10px 14px;border-radius:999px;font:500 13px/1.4 system-ui,sans-serif;box-shadow:0 10px 30px rgba(0,0,0,.25);";
+      document.body.appendChild(notice);
+    }
+    notice.textContent = message;
+  }
+
+  function clearStatus() {
+    document.getElementById("house-hunter-bookmarklet-status")?.remove();
+  }
+
+  function trySavedPropertiesImport(attempt = 0) {
+    const listings = getListingLinks();
+    if (openListInHouseHunter(listings)) {
+      clearStatus();
+      return;
+    }
+
+    if (attempt >= 5) {
+      clearStatus();
+      window.alert("House Hunter could not find any listing links on this saved-properties page yet. Scroll the list into view so the cards load, then try the bookmarklet again.");
+      return;
+    }
+
+    updateStatus(`House Hunter is collecting saved properties... (${attempt + 1}/6)`);
+    window.setTimeout(() => trySavedPropertiesImport(attempt + 1), 1200);
+  }
+
   const jsonLd = getJsonLd();
   const text = textContent();
   const title = document.title || meta("og:title") || "";
@@ -260,6 +303,7 @@
   const facts = extractPropertyFacts(text);
   const coordinates = extractCoordinates(jsonLd, html);
   const currentUrl = new URL(window.location.href);
+  const isSavedPropertiesPage = /\/account\/saved-(?:properties|off-market-properties)/i.test(currentUrl.pathname);
   const likelySingleListing = Boolean(
     (jsonLd && jsonLd.address) ||
     isListingPath(currentUrl.pathname) ||
@@ -267,25 +311,13 @@
     /(\d+)\s+bed/i.test(text)
   );
 
+  if (isSavedPropertiesPage) {
+    trySavedPropertiesImport();
+    return;
+  }
+
   if (!likelySingleListing) {
-    const launchListImport = () => {
-      const listings = getListingLinks();
-      if (!listings.length) {
-        return false;
-      }
-
-      openHouseHunter({
-        prefill_list: encodeBase64Url(JSON.stringify({ listings }))
-      });
-      return true;
-    };
-
-    if (launchListImport()) {
-      return;
-    }
-
-    if (/\/account\/saved-(?:properties|off-market-properties)/i.test(currentUrl.pathname)) {
-      updateStatusAndRetry();
+    if (openListInHouseHunter(getListingLinks())) {
       return;
     }
   }
@@ -318,29 +350,4 @@
   openHouseHunter({
     prefill: encodeBase64Url(JSON.stringify(property))
   });
-
-  function updateStatusAndRetry() {
-    const existingNotice = document.getElementById("house-hunter-bookmarklet-status");
-    if (!existingNotice) {
-      const notice = document.createElement("div");
-      notice.id = "house-hunter-bookmarklet-status";
-      notice.textContent = "House Hunter is waiting for saved properties to finish loading...";
-      notice.style.cssText = "position:fixed;right:16px;bottom:16px;z-index:2147483647;background:#111;color:#fff;padding:10px 14px;border-radius:999px;font:500 13px/1.4 system-ui,sans-serif;box-shadow:0 10px 30px rgba(0,0,0,.25);";
-      document.body.appendChild(notice);
-    }
-
-    window.setTimeout(() => {
-      const listings = getListingLinks();
-      document.getElementById("house-hunter-bookmarklet-status")?.remove();
-
-      if (listings.length) {
-        openHouseHunter({
-          prefill_list: encodeBase64Url(JSON.stringify({ listings }))
-        });
-        return;
-      }
-
-      window.alert("House Hunter could not find any listing links on this saved-properties page yet. Scroll the list into view and try the bookmarklet again.");
-    }, 1800);
-  }
 })();

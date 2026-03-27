@@ -154,6 +154,7 @@ Paste the key when prompted.
 After redeploying, the frontend can call:
 
 - `/import` for listing import
+- `/batch-import` for multi-listing bookmarklet import
 - `/eta` for traffic-aware driving ETA
 - `/geocode` for starting-location address search and coordinate lookup
 

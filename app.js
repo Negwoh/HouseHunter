@@ -2,6 +2,7 @@ const STORAGE_KEY = "house-hunter-day-plan-v2";
 const HOME_STORAGE_KEY = "house-hunter-home-v1";
 const HOUSE_HUNTER_CONFIG = window.HOUSE_HUNTER_CONFIG || {};
 const IMPORT_ENDPOINT = HOUSE_HUNTER_CONFIG.importEndpoint || "";
+const BATCH_IMPORT_ENDPOINT = HOUSE_HUNTER_CONFIG.batchImportEndpoint || (IMPORT_ENDPOINT ? IMPORT_ENDPOINT.replace(/\/import$/, "/batch-import") : "");
 const ETA_ENDPOINT = HOUSE_HUNTER_CONFIG.etaEndpoint || (IMPORT_ENDPOINT ? IMPORT_ENDPOINT.replace(/\/import$/, "/eta") : "");
 const GEOCODE_ENDPOINT = HOUSE_HUNTER_CONFIG.geocodeEndpoint || (IMPORT_ENDPOINT ? IMPORT_ENDPOINT.replace(/\/import$/, "/geocode") : "");
 
@@ -1181,13 +1182,21 @@ async function importBookmarkletList(listings) {
 
   updateAppStatus(`Importing ${uniqueListings.length} listings from the bookmarklet...`);
 
-  const importedProperties = [];
-  for (const item of uniqueListings) {
-    try {
-      const imported = await importListingData(item.listingUrl);
-      importedProperties.push(buildPropertyFromImport(imported, item.listingUrl, item.title || ""));
-    } catch {
-      importedProperties.push(buildFallbackImportedProperty(item.listingUrl, item.title || "Imported listing"));
+  let importedProperties = [];
+
+  if (BATCH_IMPORT_ENDPOINT) {
+    importedProperties = await importListingBatch(uniqueListings);
+  }
+
+  if (!importedProperties.length) {
+    importedProperties = [];
+    for (const item of uniqueListings) {
+      try {
+        const imported = await importListingData(item.listingUrl);
+        importedProperties.push(buildPropertyFromImport(imported, item.listingUrl, item.title || ""));
+      } catch {
+        importedProperties.push(buildFallbackImportedProperty(item.listingUrl, item.title || "Imported listing"));
+      }
     }
   }
 
@@ -1197,6 +1206,37 @@ async function importBookmarkletList(listings) {
   persistProperties(state.properties);
   updateAppStatus(`Imported ${importedProperties.length} listings from the bookmarklet.`);
   renderApp();
+}
+
+async function importListingBatch(listings) {
+  try {
+    const response = await fetch(BATCH_IMPORT_ENDPOINT, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        urls: listings.map((item) => item.listingUrl)
+      })
+    });
+    const payload = await response.json();
+
+    if (!response.ok || !Array.isArray(payload.results)) {
+      throw new Error(payload.error || "Batch import failed.");
+    }
+
+    const titleByUrl = new Map(listings.map((item) => [item.listingUrl, item.title || "Imported listing"]));
+
+    return payload.results.map((result) => {
+      const fallbackTitle = titleByUrl.get(result.url) || "Imported listing";
+      if (result.ok && result.property) {
+        return buildPropertyFromImport(result.property, result.url, fallbackTitle);
+      }
+      return buildFallbackImportedProperty(result.url, fallbackTitle);
+    });
+  } catch {
+    return [];
+  }
 }
 
 async function importListingData(listingUrl) {

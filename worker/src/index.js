@@ -14,6 +14,10 @@ export default {
       return handleGeocode(request, env, url);
     }
 
+    if (url.pathname === "/batch-import") {
+      return handleBatchImport(request, env);
+    }
+
     if (url.pathname !== "/import") {
       return json({ error: "Not found." }, 404, request, env);
     }
@@ -46,6 +50,56 @@ export default {
     }
   }
 };
+
+async function handleBatchImport(request, env) {
+  if (request.method !== "POST") {
+    return json({ error: "Use POST for batch import." }, 405, request, env);
+  }
+
+  let payload;
+  try {
+    payload = await request.json();
+  } catch {
+    return json({ error: "Invalid JSON body." }, 400, request, env);
+  }
+
+  const urls = Array.isArray(payload?.urls) ? payload.urls : [];
+  const normalizedUrls = [...new Set(urls.map((value) => String(value || "").trim()).filter(Boolean))];
+
+  if (!normalizedUrls.length) {
+    return json({ error: "Missing urls array." }, 400, request, env);
+  }
+
+  const results = [];
+
+  for (const listingUrl of normalizedUrls.slice(0, 50)) {
+    if (!isAllowedListingUrl(listingUrl)) {
+      results.push({
+        url: listingUrl,
+        ok: false,
+        error: "Only realestate.co.nz URLs are allowed."
+      });
+      continue;
+    }
+
+    try {
+      const property = await importListingFromUrl(listingUrl, env);
+      results.push({
+        url: listingUrl,
+        ok: true,
+        property
+      });
+    } catch (error) {
+      results.push({
+        url: listingUrl,
+        ok: false,
+        error: error.message || "Failed to import listing."
+      });
+    }
+  }
+
+  return json({ results }, 200, request, env);
+}
 
 async function handleEta(request, env, url) {
   if (!env.GOOGLE_MAPS_API_KEY) {
@@ -121,6 +175,21 @@ async function handleGeocode(request, env, url) {
   } catch (error) {
     return json({ error: error.message || "Address lookup failed." }, 500, request, env);
   }
+}
+
+async function importListingFromUrl(listingUrl, env) {
+  const response = await fetch(listingUrl, {
+    headers: {
+      "user-agent": "HouseHunterImportWorker/1.0"
+    }
+  });
+
+  if (!response.ok) {
+    throw new Error(`Listing fetch failed with status ${response.status}.`);
+  }
+
+  const html = await response.text();
+  return parseListing(html, listingUrl, env);
 }
 
 async function parseListing(html, listingUrl, env) {
@@ -540,7 +609,7 @@ function buildCorsHeaders(request, env) {
 
   return {
     "Access-Control-Allow-Origin": allowedOrigin,
-    "Access-Control-Allow-Methods": "GET, OPTIONS",
+    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
     "Access-Control-Allow-Headers": "Content-Type"
   };
 }
