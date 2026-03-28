@@ -772,6 +772,61 @@ textarea:focus {
     display: none;
   }
 
+  .timeline-item {
+    display: grid;
+    gap: 12px;
+  }
+
+  .timeline-item::before {
+    display: none;
+  }
+
+  .timeline-item-button {
+    grid-template-columns: 1fr;
+    gap: 14px;
+    padding: 18px;
+    border-radius: 24px;
+  }
+
+  .timeline-item-button::before {
+    left: 18px;
+    top: 18px;
+  }
+
+  .timeline-item-actions {
+    padding-left: 0;
+  }
+
+  .timeline-item.has-expanded-details {
+    gap: 0;
+    overflow: hidden;
+    border-radius: 28px;
+    border: 1px solid rgba(24, 24, 24, 0.08);
+    background: linear-gradient(180deg, rgba(255, 255, 253, 0.96), rgba(248, 248, 245, 0.88));
+    box-shadow: var(--shadow-md);
+  }
+
+  .timeline-item.has-expanded-details .timeline-item-button {
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+  }
+
+  .timeline-item.has-expanded-details .timeline-item-actions {
+    padding: 14px 18px 0;
+  }
+
+  .timeline-item.has-expanded-details .timeline-expanded {
+    margin-left: 0;
+    margin-top: 0;
+    padding: 18px;
+    border: 0;
+    border-top: 1px solid rgba(24, 24, 24, 0.08);
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+
   .timeline-expanded {
     display: grid;
     gap: 20px;
@@ -866,9 +921,8 @@ textarea:focus {
   }
 
   .timeline-item-button {
-    grid-template-columns: 1fr;
     gap: 12px;
-    padding: 14px 14px 14px 40px;
+    padding: 14px;
     border-radius: 18px;
   }
 
@@ -878,7 +932,6 @@ textarea:focus {
   }
 
   .timeline-expanded {
-    margin-left: 0;
     gap: 14px;
     padding: 14px;
     border-radius: 18px;
@@ -890,16 +943,21 @@ textarea:focus {
     min-width: calc(50% - 4px);
   }
 
-  .timeline-item::before {
-    left: 18px;
-  }
-
   .timeline-item-button::before {
     left: 12px;
-    top: 20px;
+    top: 16px;
     width: 11px;
     height: 11px;
     box-shadow: 0 0 0 5px rgba(217, 79, 43, 0.12);
+  }
+
+  .timeline-item.has-expanded-details {
+    border-radius: 22px;
+  }
+
+  .timeline-item.has-expanded-details .timeline-item-actions,
+  .timeline-item.has-expanded-details .timeline-expanded {
+    padding-inline: 14px;
   }
 
   .timeline-body {
