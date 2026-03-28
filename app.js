@@ -142,7 +142,7 @@ function closeSidebar() {
 async function handleAddProperty(event) {
   event.preventDefault();
   const formData = new FormData(event.currentTarget);
-  const checklist = String(formData.get("checklist"))
+  const checklist = String(formData.get("checklist") || "")
     .split("\n")
     .map((item) => item.trim())
     .filter(Boolean);
@@ -471,19 +471,12 @@ function populatePropertyDetails(container, selected) {
     container.className = "property-details empty-state";
     container.innerHTML = `
       <h2>Select a property</h2>
-      <p>Open a stop from the itinerary to review timing, notes, and checklist items.</p>
+      <p>Open a stop from the itinerary to review timing and notes.</p>
     `;
     return;
   }
 
   container.className = "property-details";
-  const sourcesMarkup = (selected.sources || [])
-    .map((source) => `<span class="source-pill">${escapeHtml(source.label)} - ${escapeHtml(source.name)}</span>`)
-    .join("");
-
-  const checklistMarkup = (selected.checklist || []).length
-    ? `<ul class="detail-list">${selected.checklist.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>`
-    : `<p class="meta-text">No checklist items yet.</p>`;
 
   container.innerHTML = `
     <div class="detail-title-block">
@@ -527,19 +520,7 @@ function populatePropertyDetails(container, selected) {
         <article><span>Parking</span><strong>${selected.parking}</strong></article>
         <article><span>Section Size</span><strong>${escapeHtml(selected.sectionSize || "-")}</strong></article>
         <article><span>Fibre</span><strong>${escapeHtml(selected.broadbandLabel || "Checking...")}</strong></article>
-        <article><span>Travel Mode</span><strong>Driving</strong></article>
       </div>
-    </section>
-
-    <section class="detail-section">
-      <h3>Checklist</h3>
-      ${checklistMarkup}
-    </section>
-
-    <section class="detail-section">
-      <h3>Sources</h3>
-      <div class="detail-actions">${sourcesMarkup || '<span class="meta-text">No external sources yet.</span>'}</div>
-      <p class="meta-text">This app stores listing metadata locally and is ready for a later ingestion layer for live listing data, estimates, and route ETAs.</p>
     </section>
 
     <section class="detail-section">
