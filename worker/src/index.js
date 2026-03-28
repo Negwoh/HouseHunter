@@ -238,6 +238,12 @@ async function importListingFromUrl(listingUrl, env) {
 
 async function parseListing(html, listingUrl, env) {
   const jsonLd = extractJsonLd(html);
+  const imageUrl = firstNonEmpty(
+    extractMeta(html, "og:image"),
+    extractMeta(html, "twitter:image"),
+    extractFirstImageFromJsonLd(jsonLd),
+    ""
+  );
   const address = firstNonEmpty(
     jsonLd && jsonLd.address && formatAddress(jsonLd.address),
     extractMeta(html, "og:title"),
@@ -284,6 +290,7 @@ async function parseListing(html, listingUrl, env) {
       "Check listing details against the property in person",
       "Review downloaded documents"
     ],
+    imageUrl,
     lat: coordinates.lat,
     lng: coordinates.lng,
     sourceUrl: listingUrl
@@ -311,6 +318,27 @@ function extractJsonLd(html) {
   }
 
   return null;
+}
+
+function extractFirstImageFromJsonLd(jsonLd) {
+  if (!jsonLd) {
+    return "";
+  }
+
+  if (typeof jsonLd.image === "string") {
+    return jsonLd.image;
+  }
+
+  if (Array.isArray(jsonLd.image)) {
+    const firstImage = jsonLd.image.find((value) => typeof value === "string");
+    return firstImage || "";
+  }
+
+  if (jsonLd.image && typeof jsonLd.image.url === "string") {
+    return jsonLd.image.url;
+  }
+
+  return "";
 }
 
 function extractMeta(html, name) {

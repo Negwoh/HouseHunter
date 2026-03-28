@@ -94,12 +94,20 @@ function bindEvents() {
   refs.exportPlanButton.addEventListener("click", exportPlan);
   refs.importPlanButton.addEventListener("click", () => refs.importPlanFileInput.click());
   refs.importPlanFileInput.addEventListener("change", importPlanFromFile);
-  refs.addPropertyButton.addEventListener("click", () => refs.propertyDialog.showModal());
+  refs.addPropertyButton.addEventListener("click", () => {
+    delete refs.propertyForm.dataset.imageUrl;
+    refs.propertyDialog.showModal();
+  });
   refs.closeDialogButton.addEventListener("click", () => refs.propertyDialog.close());
   refs.importListingButton.addEventListener("click", handleImportListing);
   refs.propertyDialog.addEventListener("click", (event) => {
     if (event.target === refs.propertyDialog) {
       refs.propertyDialog.close();
+    }
+  });
+  refs.propertyDialog.addEventListener("close", () => {
+    if (!refs.importUrlInput.value.trim()) {
+      delete refs.propertyForm.dataset.imageUrl;
     }
   });
 
@@ -181,6 +189,7 @@ async function handleAddProperty(event) {
     sectionSize: String(formData.get("sectionSize")).trim(),
     lat,
     lng,
+    imageUrl: String(refs.propertyForm.dataset.imageUrl || "").trim(),
     priceEstimate: String(formData.get("priceEstimate")).trim() || "Estimate not added",
     listingUrl,
     notes: String(formData.get("notes")).trim(),
@@ -195,6 +204,7 @@ async function handleAddProperty(event) {
   state.selectedPropertyId = property.id;
   persistProperties(state.properties);
   refs.propertyForm.reset();
+  delete refs.propertyForm.dataset.imageUrl;
   refs.propertyDialog.close();
   updateAppStatus(`Added ${property.address} to the route.`);
   renderApp();
@@ -386,8 +396,13 @@ function renderTimeline(properties, selectedPropertyId) {
     const statusChip = fragment.querySelector(".timeline-status-chip");
     const metrics = fragment.querySelector(".timeline-metrics");
     const actions = fragment.querySelector(".timeline-item-actions");
+    const backgroundImage = normalizeTimelineImageUrl(property.imageUrl);
 
     button.classList.toggle("selected", property.id === selectedPropertyId);
+    button.classList.toggle("has-image", Boolean(backgroundImage));
+    button.style.backgroundImage = backgroundImage
+      ? `linear-gradient(180deg, rgba(12, 12, 12, 0.3), rgba(12, 12, 12, 0.68)), url("${backgroundImage}")`
+      : "";
     button.addEventListener("click", () => {
       state.selectedPropertyId = property.id;
       renderApp();
@@ -611,6 +626,7 @@ function populateFormFromImport(property, listingUrl) {
     return;
   }
 
+  refs.propertyForm.dataset.imageUrl = String(property.imageUrl || "").trim();
   setFormValue("address", property.address || "");
   setFormValue("suburb", property.suburb || "");
   setFormValue("openStart", property.openStart || "");
@@ -1360,6 +1376,7 @@ function normalizeImportedProperty(property) {
     sectionSize: String(property.sectionSize || "").trim(),
     lat: parseCoordinateValue(property.lat),
     lng: parseCoordinateValue(property.lng),
+    imageUrl: String(property.imageUrl || "").trim(),
     priceEstimate: String(property.priceEstimate || "").trim(),
     listingUrl: String(property.listingUrl || "").trim(),
     notes: String(property.notes || "").trim(),
@@ -1472,6 +1489,7 @@ function buildPropertyFromImport(property, listingUrl, fallbackTitle = "") {
     sectionSize: String(property.sectionSize || "").trim(),
     lat: parseCoordinateValue(property.lat),
     lng: parseCoordinateValue(property.lng),
+    imageUrl: String(property.imageUrl || "").trim(),
     priceEstimate: String(property.priceEstimate || "Imported listing").trim(),
     listingUrl,
     notes: String(property.notes || "").trim(),
@@ -1495,6 +1513,7 @@ function buildFallbackImportedProperty(listingUrl, fallbackTitle) {
     sectionSize: "",
     lat: "",
     lng: "",
+    imageUrl: "",
     priceEstimate: "Imported listing",
     listingUrl,
     notes: "",
@@ -1506,4 +1525,18 @@ function buildFallbackImportedProperty(listingUrl, fallbackTitle) {
     status: "upcoming",
     checkInTime: null
   };
+}
+
+function normalizeTimelineImageUrl(value) {
+  const input = String(value || "").trim();
+  if (!input) {
+    return "";
+  }
+
+  try {
+    const url = new URL(input, window.location.href);
+    return url.toString().replace(/"/g, "%22");
+  } catch {
+    return "";
+  }
 }

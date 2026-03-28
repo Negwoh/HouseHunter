@@ -482,6 +482,9 @@ textarea:focus {
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.9), rgba(245, 245, 242, 0.84));
   box-shadow: var(--shadow-md);
+  background-size: cover;
+  background-position: center;
+  isolation: isolate;
 }
 
 .timeline-item-button::before {
@@ -496,11 +499,58 @@ textarea:focus {
   box-shadow: 0 0 0 7px rgba(217, 79, 43, 0.14);
 }
 
+.timeline-item-button.has-image {
+  color: #fffaf6;
+  border-color: rgba(255, 255, 255, 0.16);
+}
+
+.timeline-item-button.has-image::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.02));
+}
+
+.timeline-item-button.has-image .timeline-window,
+.timeline-item-button.has-image .timeline-suburb {
+  color: rgba(255, 247, 241, 0.84);
+}
+
+.timeline-item-button.has-image .metric-pill {
+  background: rgba(255, 250, 247, 0.14);
+  color: #fff7f2;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.timeline-item-button.has-image .chip.upcoming {
+  background: rgba(230, 255, 246, 0.14);
+  color: #dbfff2;
+}
+
+.timeline-item-button.has-image .chip.current {
+  background: rgba(255, 228, 219, 0.2);
+  color: #fff3ed;
+}
+
+.timeline-item-button.has-image .chip.done {
+  background: rgba(255, 255, 255, 0.14);
+  color: rgba(255, 247, 241, 0.92);
+}
+
 .timeline-item-button.selected {
   border-color: rgba(217, 79, 43, 0.3);
   box-shadow:
     var(--shadow-md),
     inset 0 0 0 1px rgba(217, 79, 43, 0.16);
+}
+
+.timeline-item-button.has-image.selected {
+  border-color: rgba(255, 240, 232, 0.28);
+  box-shadow:
+    var(--shadow-md),
+    inset 0 0 0 1px rgba(255, 245, 239, 0.14);
 }
 
 .timeline-item-actions {
