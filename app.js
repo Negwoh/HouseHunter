@@ -1258,12 +1258,25 @@ function clearHomeLocation() {
 }
 
 async function handleSearchHomeAddress() {
-  const address = refs.homeAddressInput.value.trim();
+  const rawInput = refs.homeAddressInput.value.trim();
 
-  if (!address) {
+  if (!rawInput) {
     updateHomeStatus("Enter an address to search.", true);
     return;
   }
+
+  const parsedMapsLocation = parseGoogleMapsLocationInput(rawInput);
+  if (parsedMapsLocation?.lat != null && parsedMapsLocation?.lng != null) {
+    refs.homeAddressInput.value = parsedMapsLocation.address || parsedMapsLocation.searchText || rawInput;
+    refs.homeLatInput.value = parsedMapsLocation.lat;
+    refs.homeLngInput.value = parsedMapsLocation.lng;
+    state.homeSearchResults = [];
+    refs.homeSearchResults.innerHTML = '<option value="">Google Maps link parsed successfully</option>';
+    updateHomeStatus("Parsed the Google Maps link. Save Home to use it as your route start.");
+    return;
+  }
+
+  const address = parsedMapsLocation?.searchText || rawInput;
 
   if (!GEOCODE_ENDPOINT) {
     updateHomeStatus("No address search endpoint is configured. Redeploy the worker to enable it.", true);
@@ -1304,6 +1317,87 @@ function handleSelectHomeAddress(event) {
   refs.homeLatInput.value = match.lat;
   refs.homeLngInput.value = match.lng;
   updateHomeStatus(`Selected ${match.address}. Save Home to use it as your route start.`);
+}
+
+function parseGoogleMapsLocationInput(input) {
+  let url;
+  try {
+    url = new URL(input);
+  } catch {
+    return null;
+  }
+
+  if (!/google\.[a-z.]+$/i.test(url.hostname) && !/google\.[a-z.]+\./i.test(url.hostname) && !/maps\.app\.goo\.gl$/i.test(url.hostname)) {
+    return null;
+  }
+
+  const coordinateMatch = firstLatLngMatch([
+    parseLatLngPair(url.searchParams.get("q")),
+    parseLatLngPair(url.searchParams.get("query")),
+    parseLatLngPair(url.searchParams.get("destination")),
+    parseLatLngPair(url.searchParams.get("daddr")),
+    parseLatLngPair(url.pathname.match(/@(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)/)?.slice(1).join(",")),
+    parseLatLngPair(decodeURIComponent(url.pathname))
+  ]);
+
+  const searchText = firstNonEmptyString([
+    sanitizeGoogleMapsText(url.searchParams.get("q")),
+    sanitizeGoogleMapsText(url.searchParams.get("query")),
+    sanitizeGoogleMapsText(url.searchParams.get("destination")),
+    sanitizeGoogleMapsText(url.searchParams.get("daddr")),
+    extractGoogleMapsPathText(url.pathname)
+  ]);
+
+  return {
+    address: searchText,
+    searchText,
+    lat: coordinateMatch?.lat ?? null,
+    lng: coordinateMatch?.lng ?? null
+  };
+}
+
+function parseLatLngPair(value) {
+  const input = String(value || "").trim();
+  if (!input) {
+    return null;
+  }
+
+  const match = input.match(/(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)/);
+  if (!match) {
+    return null;
+  }
+
+  const lat = Number(match[1]);
+  const lng = Number(match[2]);
+  return Number.isFinite(lat) && Number.isFinite(lng) ? { lat, lng } : null;
+}
+
+function firstLatLngMatch(matches) {
+  return matches.find((match) => match && Number.isFinite(match.lat) && Number.isFinite(match.lng)) || null;
+}
+
+function firstNonEmptyString(values) {
+  return values.map((value) => String(value || "").trim()).find(Boolean) || "";
+}
+
+function sanitizeGoogleMapsText(value) {
+  const text = String(value || "").replace(/\+/g, " ").trim();
+  return parseLatLngPair(text) ? "" : text;
+}
+
+function extractGoogleMapsPathText(pathname) {
+  const decodedPath = decodeURIComponent(String(pathname || ""));
+  const placeMatch = decodedPath.match(/\/place\/([^/]+)/i);
+  if (placeMatch) {
+    return sanitizeGoogleMapsText(placeMatch[1]);
+  }
+
+  const searchMatch = decodedPath.match(/\/search\/([^/]+)/i);
+  if (searchMatch) {
+    return sanitizeGoogleMapsText(searchMatch[1]);
+  }
+
+  return "";
 }
 
 function exportPlan() {
