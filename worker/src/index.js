@@ -752,6 +752,39 @@ function parseDurationSeconds(value) {
 
 function deriveBroadbandSummary(payload, lat, lng) {
   const pageUrl = `https://broadbandmap.nz/availability/${lat}/${lng}`;
+  const structuredResults = Array.isArray(payload) ? payload : Array.isArray(payload?.results) ? payload.results : [];
+  const fibreResult = structuredResults.find((entry) => /\b(fibre|fiber|ufb)\b/i.test(String(entry?.technology || "")));
+
+  if (fibreResult) {
+    const availability = String(fibreResult.availability || "").toLowerCase();
+    if (availability === "available") {
+      return {
+        status: "available",
+        label: "Fibre Available",
+        detail: "Broadband Map API",
+        pageUrl
+      };
+    }
+
+    if (availability === "unavailable") {
+      return {
+        status: "unavailable",
+        label: "Fibre Unavailable",
+        detail: "Broadband Map API",
+        pageUrl
+      };
+    }
+
+    if (availability) {
+      return {
+        status: "unknown",
+        label: `Fibre ${capitalizeWord(availability)}`,
+        detail: "Broadband Map API",
+        pageUrl
+      };
+    }
+  }
+
   const flattened = flattenBroadbandPayload(payload);
 
   const records = flattened.filter((entry) => /(fibre|fiber|ufb)/i.test(entry.path) || /(fibre|fiber|ufb)/i.test(entry.valueText));
@@ -807,6 +840,11 @@ function deriveBroadbandSummary(payload, lat, lng) {
     detail: "Open Broadband Map",
     pageUrl
   };
+}
+
+function capitalizeWord(value) {
+  const text = String(value || "").trim();
+  return text ? text.charAt(0).toUpperCase() + text.slice(1) : "";
 }
 
 function flattenBroadbandPayload(value, path = "root", results = []) {
