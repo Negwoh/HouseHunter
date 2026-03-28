@@ -32,6 +32,9 @@ const refs = {
   drawerBackdrop: document.querySelector("#drawer-backdrop"),
   timeline: document.querySelector("#timeline"),
   propertyDetails: document.querySelector("#property-details"),
+  propertyDetailsDialog: document.querySelector("#property-details-dialog"),
+  propertyDetailsModal: document.querySelector("#property-details-modal"),
+  closePropertyDetailsDialogButton: document.querySelector("#close-property-details-dialog"),
   propertyForm: document.querySelector("#property-form"),
   propertyDialog: document.querySelector("#property-dialog"),
   addPropertyButton: document.querySelector("#open-property-dialog"),
@@ -98,6 +101,12 @@ function bindEvents() {
     delete refs.propertyForm.dataset.imageUrl;
     refs.propertyDialog.showModal();
   });
+  refs.closePropertyDetailsDialogButton.addEventListener("click", closePropertyDetailsDialog);
+  refs.propertyDetailsDialog.addEventListener("click", (event) => {
+    if (event.target === refs.propertyDetailsDialog) {
+      closePropertyDetailsDialog();
+    }
+  });
   refs.closeDialogButton.addEventListener("click", () => refs.propertyDialog.close());
   refs.importListingButton.addEventListener("click", handleImportListing);
   refs.propertyDialog.addEventListener("click", (event) => {
@@ -115,12 +124,18 @@ function bindEvents() {
     state.properties = [];
     state.selectedPropertyId = null;
     persistProperties(state.properties);
+    closePropertyDetailsDialog();
     updateAppStatus("Cleared the day plan.");
     renderApp();
   });
 
   refs.refreshLocationButton.addEventListener("click", requestCurrentLocation);
-  window.matchMedia(MOBILE_LAYOUT_QUERY).addEventListener("change", () => renderApp());
+  window.matchMedia(MOBILE_LAYOUT_QUERY).addEventListener("change", (event) => {
+    if (!event.matches) {
+      closePropertyDetailsDialog();
+    }
+    renderApp();
+  });
 }
 
 function openSidebar() {
@@ -405,6 +420,9 @@ function renderTimeline(properties, selectedPropertyId) {
       : "";
     button.addEventListener("click", () => {
       state.selectedPropertyId = property.id;
+      if (isMobileLayout()) {
+        openPropertyDetailsDialog();
+      }
       renderApp();
     });
 
@@ -439,14 +457,6 @@ function renderTimeline(properties, selectedPropertyId) {
       actions.appendChild(buildMapLink("Open Listing", property.listingUrl));
     }
 
-    if (isMobileLayout() && property.id === selectedPropertyId) {
-      item.classList.add("has-expanded-details");
-      const expanded = document.createElement("div");
-      expanded.className = "timeline-expanded";
-      populatePropertyDetails(expanded, property);
-      item.appendChild(expanded);
-    }
-
     item.classList.toggle("has-actions", actions.childElementCount > 0);
     refs.timeline.appendChild(fragment);
   });
@@ -454,8 +464,10 @@ function renderTimeline(properties, selectedPropertyId) {
 
 function renderDetails(selected) {
   if (isMobileLayout()) {
-    refs.propertyDetails.className = "property-details empty-state";
-    refs.propertyDetails.innerHTML = "";
+    if (!selected) {
+      closePropertyDetailsDialog();
+    }
+    populatePropertyDetails(refs.propertyDetailsModal, selected);
     return;
   }
 
@@ -583,6 +595,9 @@ function removeProperty(propertyId) {
   state.properties = state.properties.filter((property) => property.id !== propertyId);
   state.selectedPropertyId = state.properties[0]?.id ?? null;
   persistProperties(state.properties);
+  if (isMobileLayout() && !state.selectedPropertyId) {
+    closePropertyDetailsDialog();
+  }
   updateAppStatus(removed ? `Removed ${removed.address} from the route.` : "Removed stop.");
   renderApp();
 }
@@ -1627,5 +1642,17 @@ function normalizeTimelineImageUrl(value) {
     return url.toString().replace(/"/g, "%22");
   } catch {
     return "";
+  }
+}
+
+function openPropertyDetailsDialog() {
+  if (!refs.propertyDetailsDialog.open) {
+    refs.propertyDetailsDialog.showModal();
+  }
+}
+
+function closePropertyDetailsDialog() {
+  if (refs.propertyDetailsDialog.open) {
+    refs.propertyDetailsDialog.close();
   }
 }
