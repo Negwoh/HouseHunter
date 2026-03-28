@@ -194,8 +194,14 @@ async function handleBroadband(request, env, url) {
   try {
     const response = await fetch(apiUrl, {
       headers: {
-        "user-agent": "HouseHunterBroadbandWorker/1.0",
-        "accept": "application/json"
+        "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:148.0) Gecko/20100101 Firefox/148.0",
+        "accept": "application/json, text/*",
+        "accept-language": "en-US,en;q=0.9",
+        "origin": "https://broadbandmap.nz",
+        "referer": "https://broadbandmap.nz/",
+        "sec-fetch-dest": "empty",
+        "sec-fetch-mode": "cors",
+        "sec-fetch-site": "same-site"
       }
     });
 
@@ -214,7 +220,7 @@ async function handleBroadband(request, env, url) {
       }, 502, request, env);
     }
 
-    const broadband = deriveBroadbandSummary(payload, lat, lng);
+    const broadband = deriveBroadbandSummary(payload?.results || payload, lat, lng);
     return json({ broadband }, 200, request, env);
   } catch (error) {
     return json({ error: error.message || "Broadband lookup failed." }, 500, request, env);
