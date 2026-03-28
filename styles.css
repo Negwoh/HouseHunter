@@ -577,11 +577,13 @@ textarea:focus {
 
 .timeline-item-button.done-state {
   border-color: rgba(24, 24, 24, 0.12);
-  background: linear-gradient(180deg, rgba(239, 239, 236, 0.96), rgba(232, 232, 228, 0.92));
 }
 
 .timeline-item-button.done-state.has-image::after {
-  background: linear-gradient(180deg, rgba(88, 88, 88, 0.36), rgba(108, 108, 108, 0.52));
+  background:
+    linear-gradient(180deg, rgba(74, 74, 74, 0.32), rgba(96, 96, 96, 0.48)),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.02));
+  backdrop-filter: grayscale(1) saturate(0.15);
 }
 
 .timeline-item-button.done-state .timeline-time,
