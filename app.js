@@ -439,10 +439,6 @@ function renderTimeline(properties, selectedPropertyId) {
       actions.appendChild(buildMapLink("Open Listing", property.listingUrl));
     }
 
-    if (property.broadbandMapUrl) {
-      actions.appendChild(buildMapLink(property.broadbandLabel || "Fibre Unknown", property.broadbandMapUrl));
-    }
-
     if (isMobileLayout() && property.id === selectedPropertyId) {
       item.classList.add("has-expanded-details");
       const expanded = document.createElement("div");
