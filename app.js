@@ -485,7 +485,7 @@ function populatePropertyDetails(container, selected) {
       <button id="arrive-button" class="primary-button" type="button">${selected.status === "current" ? "Mark As Done" : "Check In Now"}</button>
       <button id="remove-button" class="secondary-button" type="button">Remove Stop</button>
       ${selected.listingUrl ? `<a class="secondary-button link-button" href="${selected.listingUrl}" target="_blank" rel="noreferrer">Open Listing</a>` : ""}
-      ${selected.broadbandMapUrl ? `<a class="secondary-button link-button" href="${selected.broadbandMapUrl}" target="_blank" rel="noreferrer">${escapeHtml(selected.broadbandLabel || "Fibre Unknown")}</a>` : ""}
+      ${selected.broadbandMapUrl ? `<a class="secondary-button link-button ${buildBroadbandButtonClass(selected.broadbandStatus)}" href="${selected.broadbandMapUrl}" target="_blank" rel="noreferrer">${escapeHtml(selected.broadbandLabel || "Fibre Unknown")}</a>` : ""}
       ${selected.fromPreviousMapUrl ? `<a class="secondary-button link-button" href="${selected.fromPreviousMapUrl}" target="_blank" rel="noreferrer">Route Here</a>` : ""}
       ${selected.toNextMapUrl ? `<a class="secondary-button link-button" href="${selected.toNextMapUrl}" target="_blank" rel="noreferrer">Route To Next</a>` : ""}
     </div>
@@ -834,6 +834,7 @@ function buildAugmentedProperties(properties, currentLocation, routeCache) {
       toNextMapUrl: buildGoogleMapsDirectionsUrl(property, nextProperty),
       broadbandMapUrl: getBroadbandStatus(property).pageUrl,
       broadbandLabel: getBroadbandStatus(property).label,
+      broadbandStatus: getBroadbandStatus(property).status,
       liveEtaDetail: currentRoute
         ? `Live Google route estimate: ${currentRoute.durationLabel}, ${currentRoute.distanceLabel}.`
         : state.currentLocation
@@ -1021,6 +1022,7 @@ function buildBroadbandMapUrl(property) {
 function getBroadbandStatus(property) {
   if (!hasCoordinates(property)) {
     return {
+      status: "unknown",
       label: "No location",
       pageUrl: ""
     };
@@ -1030,6 +1032,7 @@ function getBroadbandStatus(property) {
   const cached = state.broadbandCache[buildBroadbandKey(property)];
   if (cached) {
     return {
+      status: cached.status || "unknown",
       label: cached.label || "Fibre Unknown",
       pageUrl: cached.pageUrl || fallbackPageUrl
     };
@@ -1037,15 +1040,30 @@ function getBroadbandStatus(property) {
 
   if (state.pendingBroadbandRequests.has(buildBroadbandKey(property))) {
     return {
+      status: "checking",
       label: "Checking fibre...",
       pageUrl: fallbackPageUrl
     };
   }
 
   return {
+    status: "unknown",
     label: "Check fibre",
     pageUrl: fallbackPageUrl
   };
+}
+
+function buildBroadbandButtonClass(status) {
+  switch (status) {
+    case "available":
+      return "status-button status-button-success";
+    case "unavailable":
+      return "status-button status-button-danger";
+    case "checking":
+    case "unknown":
+    default:
+      return "status-button status-button-warning";
+  }
 }
 
 function buildMapsLocationValue(value) {

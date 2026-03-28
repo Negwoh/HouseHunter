@@ -412,6 +412,28 @@ textarea:focus {
   border: 1px solid rgba(24, 24, 24, 0.08);
 }
 
+.status-button {
+  font-weight: 700;
+}
+
+.status-button-success {
+  background: rgba(36, 99, 75, 0.14);
+  color: var(--success);
+  border-color: rgba(36, 99, 75, 0.22);
+}
+
+.status-button-danger {
+  background: rgba(178, 58, 72, 0.14);
+  color: var(--danger);
+  border-color: rgba(178, 58, 72, 0.22);
+}
+
+.status-button-warning {
+  background: rgba(154, 106, 17, 0.14);
+  color: var(--warning);
+  border-color: rgba(154, 106, 17, 0.22);
+}
+
 .primary-button:hover,
 .ghost-button:hover,
 .secondary-button:hover,
