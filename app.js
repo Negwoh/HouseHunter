@@ -414,6 +414,7 @@ function renderTimeline(properties, selectedPropertyId) {
     const backgroundImage = normalizeTimelineImageUrl(property.imageUrl);
 
     button.classList.toggle("selected", property.id === selectedPropertyId);
+    button.classList.toggle("done-state", property.status === "done");
     button.classList.toggle("has-image", Boolean(backgroundImage));
     button.style.backgroundImage = backgroundImage
       ? `linear-gradient(180deg, rgba(12, 12, 12, 0.3), rgba(12, 12, 12, 0.68)), url("${backgroundImage}")`
@@ -494,7 +495,7 @@ function populatePropertyDetails(container, selected) {
     </div>
 
     <div class="detail-actions">
-      <button id="arrive-button" class="primary-button" type="button">${selected.status === "current" ? "Mark As Done" : "Check In Now"}</button>
+      <button id="arrive-button" class="primary-button" type="button">${getArrivalButtonLabel(selected.status)}</button>
       <button id="remove-button" class="secondary-button" type="button">Remove Stop</button>
       ${selected.listingUrl ? `<a class="secondary-button link-button" href="${selected.listingUrl}" target="_blank" rel="noreferrer">Open Listing</a>` : ""}
       ${selected.broadbandMapUrl ? `<a class="secondary-button link-button ${buildBroadbandButtonClass(selected.broadbandStatus)}" href="${selected.broadbandMapUrl}" target="_blank" rel="noreferrer">${escapeHtml(selected.broadbandLabel || "Fibre Unknown")}</a>` : ""}
@@ -563,7 +564,20 @@ function toggleArrival(propertyId) {
   }
 
   const currentProperty = state.properties[targetIndex];
-  if (currentProperty.status === "current") {
+  if (currentProperty.status === "done") {
+    state.properties = state.properties.map((property, index) => {
+      if (property.id === propertyId) {
+        return { ...property, status: "upcoming", checkInTime: null };
+      }
+      if (index > targetIndex) {
+        return property.status === "done"
+          ? { ...property, status: "upcoming", checkInTime: null }
+          : { ...property, checkInTime: property.status === "upcoming" ? null : property.checkInTime };
+      }
+      return property;
+    });
+    updateAppStatus(`Moved ${currentProperty.address} back to upcoming.`);
+  } else if (currentProperty.status === "current") {
     state.properties[targetIndex] = {
       ...currentProperty,
       status: "done",
@@ -588,6 +602,16 @@ function toggleArrival(propertyId) {
 
   persistProperties(state.properties);
   renderApp();
+}
+
+function getArrivalButtonLabel(status) {
+  if (status === "done") {
+    return "Undo Done";
+  }
+  if (status === "current") {
+    return "Mark As Done";
+  }
+  return "Check In Now";
 }
 
 function removeProperty(propertyId) {

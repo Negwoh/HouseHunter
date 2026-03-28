@@ -575,6 +575,28 @@ textarea:focus {
     inset 0 0 0 1px rgba(255, 245, 239, 0.14);
 }
 
+.timeline-item-button.done-state {
+  border-color: rgba(24, 24, 24, 0.12);
+  background: linear-gradient(180deg, rgba(239, 239, 236, 0.96), rgba(232, 232, 228, 0.92));
+}
+
+.timeline-item-button.done-state.has-image::after {
+  background: linear-gradient(180deg, rgba(88, 88, 88, 0.36), rgba(108, 108, 108, 0.52));
+}
+
+.timeline-item-button.done-state .timeline-time,
+.timeline-item-button.done-state .timeline-window,
+.timeline-item-button.done-state .timeline-suburb,
+.timeline-item-button.done-state h3 {
+  color: rgba(255, 248, 244, 0.82);
+}
+
+.timeline-item-button.done-state .metric-pill {
+  background: rgba(255, 255, 255, 0.12);
+  color: rgba(255, 248, 244, 0.88);
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
 .timeline-item-actions {
   display: flex;
   flex-wrap: wrap;
